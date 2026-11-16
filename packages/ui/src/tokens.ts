@@ -23,6 +23,8 @@ export const typeScale = {
   sectionHeading: { font: 'body', size: 18, weight: '600' },
   body: { font: 'body', size: 15, weight: '400' },
   bodyStrong: { font: 'body', size: 15, weight: '600' },
+  /** The restaurant app reads at arm's length in a busy kitchen: book section 19 sets 17 px. */
+  restaurantBody: { font: 'body', size: 17, weight: '400' },
   caption: { font: 'body', size: 13, weight: '400' },
   label: { font: 'body', size: 11, weight: '400' },
 } as const;

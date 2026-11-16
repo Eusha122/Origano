@@ -5,10 +5,17 @@ import { useLocale } from './locale';
 import { bodyFont } from './typography';
 
 /** Body text: plum, or muted plum for secondary details; strong uses the semi-bold face. */
-export function Body(props: { children: ReactNode; muted?: boolean; strong?: boolean }) {
+export function Body(props: { children: ReactNode; muted?: boolean; strong?: boolean; large?: boolean }) {
   const { locale } = useLocale();
   return (
-    <Text style={[styles.body, props.muted && styles.muted, { fontFamily: bodyFont(locale, props.strong ?? false) }]}>
+    <Text
+      style={[
+        styles.body,
+        props.large && styles.large,
+        props.muted && styles.muted,
+        { fontFamily: bodyFont(locale, props.strong ?? false) },
+      ]}
+    >
       {props.children}
     </Text>
   );
@@ -16,5 +23,6 @@ export function Body(props: { children: ReactNode; muted?: boolean; strong?: boo
 
 const styles = StyleSheet.create({
   body: { color: colors.plum, fontSize: typeScale.body.size },
+  large: { fontSize: typeScale.restaurantBody.size },
   muted: { color: colors.mutedPlum },
 });

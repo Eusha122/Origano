@@ -10,9 +10,11 @@ export function Button(props: {
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
   busy?: boolean;
+  /** For a choice among several buttons: marks this one as the chosen one (aria-pressed) and fills it. */
+  selected?: boolean;
 }) {
   const { locale } = useLocale();
-  const primary = (props.variant ?? 'primary') === 'primary';
+  const primary = props.selected ?? (props.variant ?? 'primary') === 'primary';
   const inactive = Boolean(props.disabled || props.busy);
   return (
     <Pressable
@@ -20,6 +22,7 @@ export function Button(props: {
       accessibilityLabel={props.label}
       aria-disabled={inactive}
       aria-busy={props.busy ?? false}
+      aria-pressed={props.selected}
       disabled={inactive}
       onPress={props.onPress}
       style={({ pressed }) => [
