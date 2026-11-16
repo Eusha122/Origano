@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "module": "Preserve", "moduleResolution": "Bundler", "noEmit": true, "types": ["node"] },
+  "include": ["src", "*.config.ts"]
+}
