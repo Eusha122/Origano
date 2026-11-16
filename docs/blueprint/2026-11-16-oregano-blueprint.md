@@ -1,0 +1,263 @@
+# Oregano Platform Blueprint
+
+Version 1.0, 16 November 2026. Source of product truth: `Oregano-Product-and-Brand-Book.pdf` (called "the book" below). This document says how the book gets built. Where the two disagree, the book wins on what the product does, and this document wins on how it is built.
+
+## 1. Confirmed intent
+
+Confirmed by the founder on 16 November 2026.
+
+- **Outcome:** one codebase that ships the customer website, the Android and iOS apps, the restaurant app, the rider app and the admin dashboard.
+- **Users:** customers, restaurants and riders in Chapainawabganj first. The Oregano team uses the admin dashboard.
+- **Success:** the website and the native apps launch together with every feature in the book working. Opening a new town is a settings change, not a rebuild.
+- **Constraints:** Claude builds it, with no deadline. It must work on low-end phones and 3G, in Bangla and English. 1M+ users is the design target, so running costs start small and grow with usage.
+- **Payments:** cash on delivery only at launch. A payment gateway comes after launch.
+- **Out of scope for launch:** any online payment (bKash, Nagad, cards or a gateway), carts spanning several restaurants, Oregano employing riders or cooking food.
+- **Build order:** shared foundation, then one cash-on-delivery order end to end across all four surfaces, then the remaining features.
+
+## 2. How big "1M users" really is
+
+These are planning estimates, not measurements.
+
+| Quantity              | Estimate             | Basis                               |
+| --------------------- | -------------------- | ----------------------------------- |
+| Registered users      | 1,000,000            | Design target                       |
+| Daily active users    | 100,000              | 10% of registered                   |
+| Orders per day        | 30,000               | 0.3 per daily active user           |
+| Peak orders           | about 2 per second   | 20% of the day's orders in one hour |
+| Peak API requests     | about 300 per second | 50 requests per session             |
+| Riders online at peak | about 3,000          | 10 orders per rider per day         |
+
+This load fits comfortably on a few ordinary servers and one well-indexed PostgreSQL database. The design goal is therefore correctness and operability, not exotic scale machinery. The system is one deployable backend with strict internal module boundaries (a "modular monolith"), so that a module can be split into its own service later only if measurements demand it.
+
+## 3. Architecture at a glance
+
+```
+ Customer app      Restaurant app     Rider app        Admin dashboard
+ (web/Android/iOS) (web/Android/iOS)  (web/Android/iOS) (web only)
+        \                |                 |                /
+         \---------------+--- HTTPS /v1 ---+---------------/
+                         |    WebSocket (hints only)
+                 +-------v--------+
+   CDN + WAF --> |   API server   |  stateless, runs as N copies
+                 +---+-------+----+
+                     |       |
+            +--------v-+   +-v--------+      +------------------+
+            | Postgres |   |  Redis   | <--> |  Worker process  |
+            | +PostGIS |   | cache,   |      | timers, SMS, push|
+            | (truth)  |   | queue,   |      | statements,      |
+            +----------+   | pub/sub  |      | outbox relay     |
+                           +----------+      +------------------+
+                     |
+            Object storage (menu photos public via CDN, ID documents private)
+```
+
+Rules that hold everywhere:
+
+1. **PostgreSQL is the only source of truth.** Redis holds nothing that cannot be rebuilt.
+2. **Real-time messages are hints.** A WebSocket or push message only says "order X changed". The client then fetches the order over HTTPS. A missed message can never leave a screen wrong after the next fetch.
+3. **Every state change is a transaction that also writes an event row** (the "outbox"). The worker reads the outbox and sends pushes, SMS and WebSocket hints. Nothing is sent from inside a request, so a crash cannot lose or double-apply a change.
+4. **Every write endpoint accepts an idempotency key.** A retry on a bad 3G connection returns the first result instead of creating a second order.
+5. **Business rules live in pure code** (`packages/domain`) with no database or network access, so they are tested exhaustively and shared by server and clients.
+
+## 4. Technology decisions
+
+Exact versions are not pinned here. The executor installs the latest stable release and checks the official documentation before each install.
+
+| Area                             | Decision                                                                                      | Why                                                                                                               | Revisit when                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Language                         | TypeScript, strict mode, everywhere                                                           | One language across four apps and the server; shared types                                                        | Never                                  |
+| Runtime                          | Node.js 24 LTS                                                                                | Already installed; long-term support                                                                              | Next LTS                               |
+| Repo                             | pnpm workspaces + Turborepo                                                                   | Standard for Expo monorepos; cached builds                                                                        | Never                                  |
+| Lint and format                  | Biome                                                                                         | One tool instead of two                                                                                           | It lacks a rule we need                |
+| Customer, restaurant, rider apps | Expo (React Native) with Expo Router, built for web, Android and iOS                          | The founder requires one codebase for site and apps                                                               | Web bundle exceeds budget (section 10) |
+| Admin dashboard                  | React + Vite, web only                                                                        | Dense tables and forms are poor in React Native                                                                   | Never                                  |
+| API                              | Fastify, REST under `/v1`, Zod-validated                                                      | Old app versions stay in the wild for months; a versioned REST contract tolerates that                            | Never                                  |
+| Contracts                        | Zod schemas in `packages/contracts`, used by server and clients                               | One definition of every request and response                                                                      | Never                                  |
+| Database                         | PostgreSQL with PostGIS                                                                       | Transactions for money and orders; PostGIS for delivery zones                                                     | Never                                  |
+| Data access                      | Drizzle ORM with SQL migrations                                                               | Thin, typed, explicit SQL                                                                                         | Never                                  |
+| Cache, queue, pub/sub            | Redis with BullMQ                                                                             | One dependency covers rate limits, timers, fan-out                                                                | Queue depth needs a dedicated broker   |
+| Real-time                        | WebSocket from the API, fanned out through Redis pub/sub                                      | Built into React Native; hints only                                                                               | Never                                  |
+| Push                             | Firebase Cloud Messaging and Apple Push, through Expo Notifications                           | Standard path for Expo                                                                                            | Never                                  |
+| SMS                              | Local Bangladeshi gateway behind an `SmsSender` interface, with a second provider as failover | Local routes are far cheaper than international ones; provider chosen after a delivery test on all four operators | Delivery rate drops                    |
+| Maps                             | MapLibre with OpenStreetMap-based tiles behind a `MapProvider` interface                      | No per-load fees at scale; Barikoi is a candidate for Bangladeshi addresses                                       | Tile quality in a town is poor         |
+| Media                            | S3-compatible object storage + CDN; images resized to WebP at upload                          | Works on 3G; cheap                                                                                                | Never                                  |
+| Hosting                          | Docker containers; managed PostgreSQL and Redis; Cloudflare in front                          | Portable; managed backups                                                                                         | See section 9                          |
+| Server tests                     | Vitest; integration tests against real PostgreSQL                                             | No mocked database                                                                                                | Never                                  |
+| Web end-to-end tests             | Playwright                                                                                    | Standard                                                                                                          | Never                                  |
+| Native end-to-end tests          | Maestro (from Plan 10)                                                                        | Works with Expo                                                                                                   | Never                                  |
+| Errors and tracing               | Sentry + OpenTelemetry, structured JSON logs                                                  | Find the failing order from a support call                                                                        | Never                                  |
+
+## 5. Repository layout
+
+```
+oregano/
+  apps/
+    api/         Fastify backend. Two entry points: server.ts (HTTP + WebSocket) and worker.ts (jobs).
+    customer/    Expo app: web, Android, iOS.
+    restaurant/  Expo app: web, Android, iOS.
+    rider/       Expo app: web, Android, iOS.
+    admin/       React + Vite dashboard.
+  packages/
+    domain/      Pure business rules: money, order state machine, pricing, fees, referral rules.
+    contracts/   Zod schemas for every request, response and event.
+    api-client/  Typed fetch client and data hooks used by all four apps.
+    ui/          Brand tokens and shared components.
+    i18n/        English and Bangla strings, number and money formatting.
+  infra/         docker-compose for local work; deployment definitions later.
+  docs/          This blueprint, the roadmap and the plans.
+```
+
+Three separate Expo apps, not one app with roles. Each has its own store listing, its own permissions (the rider app needs location, the restaurant app needs alarm-style notifications) and stays small on low-end phones.
+
+### Backend modules
+
+Each module lives in `apps/api/src/<module>/` with `routes.ts`, `service.ts`, `repo.ts` and `events.ts`. A module may call another module's service. It may never read or write another module's tables.
+
+| Module        | Owns                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| identity      | Phone OTP, sessions, roles, staff membership                               |
+| zones         | Delivery areas, fee settings, per-zone business settings                   |
+| catalog       | Restaurants, hours, menus, items, options, availability, discounts, search |
+| onboarding    | Restaurant applications, rider verification, approval queue                |
+| cart          | Carts and Hangout (group) carts                                            |
+| ordering      | Orders, the order state machine, the order event log                       |
+| dispatch      | Rider availability, offers, assignment, reassignment                       |
+| ledger        | Double-entry money records, payments, transaction IDs                      |
+| billing       | Commission, monthly statements, unpaid-listing pause                       |
+| referrals     | Codes, unlock rules, abuse flags                                           |
+| ratings       | Stars, tags, comments                                                      |
+| notifications | Push, SMS, WhatsApp, in-app; per-user preferences                          |
+| media         | Uploads, resizing, signed URLs                                             |
+| growth        | QR links, install attribution, monthly restaurant report                   |
+| admin         | Support lookup, notes, audit log                                           |
+
+## 6. Core domain decisions
+
+### Money
+
+All amounts are stored as whole poisha (1 Tk = 100 poisha) in integer columns. Percentages round half up to the nearest whole taka. Formatting follows the book: `Tk 280` in English, `৳২৮০` in Bangla.
+
+All money movement is recorded in a double-entry ledger (every entry debits one account and credits another). Commission, referral refunds and monthly statements are computed from ledger entries, never from order totals directly. This keeps the statement arithmetic in the book auditable line by line.
+
+### Orders
+
+Status is one explicit value. The tracking timeline is read from the event log, not from status.
+
+| Status        | Meaning                                                  |
+| ------------- | -------------------------------------------------------- |
+| placed        | Customer confirmed; restaurant alerted                   |
+| preparing     | Restaurant accepted and set a ready time                 |
+| ready         | Food packed                                              |
+| on_the_way    | Rider has the food (delivery orders only)                |
+| delivered     | Handed over (or collected, for pickup)                   |
+| rejected      | Restaurant declined with a reason                        |
+| cancelled     | Customer cancelled before acceptance, or admin cancelled |
+| expired       | Restaurant did not answer in time                        |
+| undeliverable | Rider could not hand over; food returned                 |
+
+The book's "Accepted" step is the event that moves an order from placed to preparing. The customer sees it in the timeline with its time.
+
+Rider assignment is tracked separately from status (unassigned, offered, assigned), because a rider is offered the order while the kitchen is still cooking.
+
+### Dispatch
+
+An order is offered to online riders near the restaurant. The first rider to accept claims it in one atomic database update, so two riders can never both win. If nobody accepts, the offer widens in waves and the admin dashboard is alerted. A restaurant can instead assign its own staff rider or an agency rider directly. No rider scoring or batching: the book treats every rider the same.
+
+The book does not ask for a live rider dot on a map, so rider location is kept only in Redis, updated every 30 seconds while online, and used to choose who gets offers.
+
+### Delivery fee
+
+`fee = max(zone minimum fee, distance in km x zone fee per km)`, rounded up to a whole taka. Distance is straight-line distance multiplied by a per-zone road factor (default 1.3). This replaces a paid routing service until a town shows it is unfair.
+
+### Towns
+
+Every restaurant belongs to a zone. A zone has a boundary polygon, fee settings and business settings. Launching a new town means drawing a zone and onboarding restaurants.
+
+### Sign-up flows
+
+Restaurants enter through two doors into one approval queue: the Oregano team creates the account and enters the menu from a photo (as the book describes), or the owner applies through a "Partner with Oregano" form. Required: trade licence, owner's national ID, and a bKash, Nagad or bank account. An admin can waive the licence.
+
+Riders sign up by phone OTP, choose a type, and upload national ID, photo, vehicle details and guarantor, as the book lists. Agency riders are invited by their agency and staff riders by their restaurant. Every restaurant and rider account is one of: applied, under review, approved, rejected, suspended.
+
+## 7. Security
+
+Target: OWASP Application Security Verification Standard, level 2.
+
+- **Sign-in:** 6-digit OTP, stored hashed, valid 5 minutes, 5 attempts. Resend after 60 seconds. At most 5 sends per phone per hour and 20 per IP address per hour. Only numbers matching `+8801[3-9]XXXXXXXX` are accepted, which blocks the common fraud of triggering paid SMS to foreign numbers.
+- **Sessions:** 15-minute access token. 60-day refresh token that is replaced on every use; reuse of an old one revokes the whole session family. Stored in the device keystore on native and an httpOnly cookie on web.
+- **Access control:** every endpoint checks role and ownership on the server. Restaurant staff see only their restaurant. Staff riders see only their restaurant's orders. A rider receives the customer's phone number only while that delivery is active, and the server strips it otherwise.
+- **Personal documents:** national ID images go to a private bucket and are served through signed links valid for 5 minutes, to admins only.
+- **Admin actions:** every one is written to an audit log with who, what and when.
+- **Abuse:** rate limits on all write endpoints; referral abuse flags for repeated devices and numbers.
+- **Supply chain and secrets:** dependency audit in CI; secrets only in the host's secret store, never in the repository.
+- **Data:** encrypted connections everywhere, encrypted disks, daily backups with point-in-time recovery, and a restore rehearsal before launch.
+
+## 8. Reliability
+
+- **Restaurant order alert.** The book asks for a full-screen alert with sound that repeats until answered, even in the background. Android 14 and later reserve true full-screen takeover for calling and alarm apps, and iOS reserves its strongest alerts for safety apps. The design is therefore layered:
+  1. A high-priority push starts a looping alarm sound and a persistent heads-up notification on a dedicated channel.
+  2. The restaurant app has a "kitchen mode" that keeps the screen on and shows the full-screen alert whenever the app is open.
+  3. An SMS goes to the restaurant after 90 seconds unanswered.
+  4. The admin dashboard is alerted after 3 minutes.
+  5. The order expires after 5 minutes.
+- **Timers** (expiry, offer waves, statement runs) are durable jobs in the queue, not in-memory timeouts.
+- **Targets:** 99.9% monthly availability for order placement; order placement answered within 500 ms at the 95th percentile on the server.
+- **Degradation:** if Redis is down, ordering still works and real-time hints stop; clients fall back to polling every 15 seconds.
+
+## 9. Growth stages
+
+|                        | Stage 1: one town                                         | Stage 2: several districts         | Stage 3: national                                         |
+| ---------------------- | --------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
+| Users                  | up to 10,000                                              | up to 100,000                      | 1M+                                                       |
+| API                    | 2 small copies                                            | 3 to 4 copies, autoscaled          | autoscaled, worker pool separate                          |
+| PostgreSQL             | 1 managed instance, daily backup + point-in-time recovery | larger instance + 1 read replica   | read replicas, partition order and ledger tables by month |
+| Redis                  | 1 small managed instance                                  | same, larger                       | separate instances for queue and cache                    |
+| Search                 | PostgreSQL full-text and trigram                          | same                               | dedicated search service if measured slow                 |
+| What triggers the move | n/a                                                       | CPU or connection pressure at peak | replica lag or table size hurting queries                 |
+
+No stage needs a rewrite. Region default is Singapore, to be confirmed by measuring latency from Chapainawabganj on Grameenphone, Robi and Banglalink against Mumbai before launch.
+
+## 10. Quality bars
+
+- **Web:** first load usable within 5 seconds on a throttled "slow 3G" profile for the customer home page. If the Expo web bundle cannot meet this, the public customer pages are rebuilt as a lighter web front end over the same API and packages.
+- **Android app:** download size under 25 MB per app.
+- **Accessibility:** tap targets at least 48 px, text contrast at least 4.5:1, no meaning carried by colour alone (from the book).
+- **Languages:** every string exists in English and Bangla; CI fails if a key is missing in either.
+- **Tests:** business rules in `packages/domain` have full branch coverage. Every API endpoint has an integration test against a real database.
+- **Load test before launch:** 50 orders per second sustained for 10 minutes, about 25 times the estimated national peak.
+
+## 11. Defaults chosen for blanks in the book
+
+The book leaves these blank. Each is a per-zone setting the admin can change.
+
+| Setting                          | Default                          |
+| -------------------------------- | -------------------------------- |
+| Restaurant no-answer auto-cancel | 5 minutes                        |
+| No-rider admin alert             | 5 minutes                        |
+| Unpaid statement pauses listing  | 14 days after the statement date |
+| Referral discount cap            | Tk 50                            |
+| Promotional pushes               | at most 2 per week               |
+| Delivery fee per km              | Tk 10                            |
+| Minimum delivery fee             | Tk 20                            |
+
+## 12. Open questions for the founder
+
+None of these block Plans 01 or 02.
+
+Answered by the founder on 16 November 2026:
+
+- **Payments at launch:** cash on delivery only. A payment gateway is added after launch. The bKash and Nagad transaction-ID flow in book section 3.7 is deferred to that later work, and the ledger (section 6) is designed so a gateway adds new entry types without changing existing ones.
+- **Logo artwork:** supplied in `Oregano-Logo-Kit/Oregano-Logo-Kit/` (wordmark, O mark and app icons in SVG, PNG and PDF, in every brand colour). Use these files; never retype the logo.
+
+Still open:
+
+1. **Cash flow on delivery.** The rider collects cash from the customer. How does the food money reach the restaurant: does the rider pay the restaurant at pickup, or hand it over afterwards? Needed for Plan 07.
+2. **Data protection law.** Bangladesh's current personal data rules may restrict storing personal data abroad. This needs a legal check before the hosting region is final. Needed for Plan 11.
+3. **Bangla copy.** A native speaker should review all Bangla strings before launch.
+4. **The defaults in section 11.**
+
+## 13. Research notes
+
+Bangladesh-specific public sources were thin, and most architecture sources found were secondary guides, not first-hand engineering posts. The decisions above follow widely used patterns (explicit order state machine, outbox, idempotent writes, layered OTP limits) and are sized from the estimates in section 2. Every library choice is re-checked against official documentation when it is installed.
+
+Sources: foodpanda Bangladesh partner portal (partner.foodpanda.com.bd); Pathao help centre (help.pathao.com/?p=238); DoorDash Dasher signup process (help.doordash.com); Android full-screen intent changes (proandroiddev.com, "Full-Screen Intent notifications in Android 14 & 15"); Firebase message priority documentation (firebase.google.com/docs/cloud-messaging/android/message-priority); Expo monorepo guide (docs.expo.dev); Handoff's universal Expo production write-up (handoff.ai/tech); ClickSend guidance on SMS pumping (help.clicksend.com); Bangladesh SMS pricing comparison (sent.dm/resources/bangladesh-sms-pricing).

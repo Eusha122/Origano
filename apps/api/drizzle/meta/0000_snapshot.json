@@ -1,0 +1,147 @@
+{
+  "id": "515aa278-f4d4-40d4-9481-5cc0d26c0afd",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.zones": {
+      "name": "zones",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_bn": {
+          "name": "name_bn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "boundary": {
+          "name": "boundary",
+          "type": "geography(Polygon, 4326)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fee_per_km_poisha": {
+          "name": "fee_per_km_poisha",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_fee_poisha": {
+          "name": "min_fee_poisha",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "road_factor": {
+          "name": "road_factor",
+          "type": "numeric(3, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1.30'"
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Asia/Dhaka'"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "zones_boundary_idx": {
+          "name": "zones_boundary_idx",
+          "columns": [
+            {
+              "expression": "boundary",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gist",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "zones_slug_unique": {
+          "name": "zones_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "zones_fee_per_km_non_negative": {
+          "name": "zones_fee_per_km_non_negative",
+          "value": "\"zones\".\"fee_per_km_poisha\" >= 0"
+        },
+        "zones_min_fee_non_negative": {
+          "name": "zones_min_fee_non_negative",
+          "value": "\"zones\".\"min_fee_poisha\" >= 0"
+        },
+        "zones_road_factor_at_least_one": {
+          "name": "zones_road_factor_at_least_one",
+          "value": "\"zones\".\"road_factor\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
