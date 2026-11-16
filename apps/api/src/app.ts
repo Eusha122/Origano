@@ -7,17 +7,19 @@ import type { Config } from './config';
 import type { Db } from './db/client';
 import { dispatchRoutes } from './dispatch/routes';
 import { AppError } from './errors';
+import type { RealtimeHub } from './events/realtime';
 import { healthRoutes, type ReadinessCheck } from './health/routes';
 import { registerAuth } from './identity/auth';
 import { devRoutes } from './identity/dev-routes';
 import type { OtpSender } from './identity/otp';
 import { identityRoutes } from './identity/routes';
+import { findUserByToken } from './identity/sessions';
 import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
 
 export type { ReadinessCheck } from './health/routes';
 
-export type Services = { db: Db; otpSender: OtpSender };
+export type Services = { db: Db; otpSender: OtpSender; realtime?: RealtimeHub };
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -99,5 +101,6 @@ export async function buildApp(deps: {
       { prefix: '/v1' },
     );
   }
+  if (services?.realtime) services.realtime.register(app, (token) => findUserByToken(services.db, token));
   return app;
 }

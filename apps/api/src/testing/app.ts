@@ -5,11 +5,12 @@ import { buildApp } from '../app';
 import { loadConfig } from '../config';
 import type { Db } from '../db/client';
 import { type DemoIds, seedDemo } from '../dev/seed-demo';
+import { RealtimeHub } from '../events/realtime';
 import { CapturingOtpSender } from '../identity/otp';
 import { withTestDb } from './db';
 
 /** A real API on a real, migrated test database, with demo data seeded before each test. */
-export function withTestApp(options: { devOtpPeek?: boolean } = {}): {
+export function withTestApp(options: { devOtpPeek?: boolean; realtime?: boolean } = {}): {
   app: () => FastifyInstance;
   db: Db;
   otp: CapturingOtpSender;
@@ -28,9 +29,14 @@ export function withTestApp(options: { devOtpPeek?: boolean } = {}): {
   });
   let instance: FastifyInstance | undefined;
   let ids: DemoIds | undefined;
+  const hub = options.realtime ? new RealtimeHub(config.redisUrl) : undefined;
 
   beforeAll(async () => {
-    instance = await buildApp({ config, checks: [], services: { db, otpSender: otp } });
+    instance = await buildApp({ config, checks: [], services: { db, otpSender: otp, realtime: hub } });
+    if (hub) {
+      await hub.start();
+      await instance.listen({ port: 0, host: '127.0.0.1' });
+    }
   });
 
   beforeEach(async () => {
@@ -40,6 +46,7 @@ export function withTestApp(options: { devOtpPeek?: boolean } = {}): {
 
   afterAll(async () => {
     await instance?.close();
+    await hub?.stop();
   });
 
   const app = (): FastifyInstance => {
