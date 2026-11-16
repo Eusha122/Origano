@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { adminRoutes } from './admin/routes';
 import { catalogRoutes } from './catalog/routes';
 import type { Config } from './config';
 import type { Db } from './db/client';
@@ -92,6 +93,7 @@ export async function buildApp(deps: {
         orderRoutes(v1, services);
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);
+        adminRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services.otpSender);
       },
       { prefix: '/v1' },
