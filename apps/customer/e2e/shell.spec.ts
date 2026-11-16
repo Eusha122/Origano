@@ -17,7 +17,10 @@ test('shows the brand promise and switches language', async ({ page }) => {
 
 test('language button meets the minimum tap target', async ({ page }) => {
   await page.goto('/');
-  const box = await page.getByRole('button', { name: 'বাংলা' }).boundingBox();
+  const button = page.getByRole('button', { name: 'বাংলা' });
+  // The screen renders only after fonts load; boundingBox() does not wait for visibility.
+  await expect(button).toBeVisible();
+  const box = await button.boundingBox();
   expect(box?.height).toBeGreaterThanOrEqual(48);
 });
 

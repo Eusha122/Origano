@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: oregano
+          POSTGRES_PASSWORD: oregano
+          POSTGRES_DB: oregano
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U oregano -d oregano"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgres://oregano:oregano@localhost:5432/oregano
+      TEST_DATABASE_URL: postgres://oregano:oregano@localhost:5432/oregano_test
+      REDIS_URL: redis://localhost:6379
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create the test database
+        run: PGPASSWORD=oregano psql -h localhost -U oregano -d oregano -c 'CREATE DATABASE oregano_test OWNER oregano;'
+      - run: pnpm --filter @oregano/customer exec playwright install --with-deps chromium
+      - run: pnpm db:migrate
+      - run: pnpm verify
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm audit --audit-level high
