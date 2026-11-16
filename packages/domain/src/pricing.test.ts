@@ -26,11 +26,9 @@ describe('deliveryFee', () => {
 
 describe('order totals', () => {
   it('multiplies each line and adds the delivery fee', () => {
-    const lines = [
-      { unitPrice: taka(380), quantity: 2 },
-      { unitPrice: taka(180), quantity: 1 },
-    ];
-    expect(lineTotal(lines[0]!)).toBe(taka(760));
+    const first = { unitPrice: taka(380), quantity: 2 };
+    const lines = [first, { unitPrice: taka(180), quantity: 1 }];
+    expect(lineTotal(first)).toBe(taka(760));
     expect(orderTotals(lines, taka(20))).toEqual({ subtotal: taka(940), deliveryFee: taka(20), total: taka(960) });
   });
 
