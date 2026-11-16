@@ -25,6 +25,7 @@ type OrderRow = {
   lat: number;
   lng: number;
   delivery_phone: string;
+  note: string | null;
   ready_in_minutes: number | null;
   reject_reason: Order['rejectReason'];
   created_at: string;
@@ -53,7 +54,7 @@ export async function loadOrders(db: Executor, ids: string[], viewer: Viewer): P
       r.name_en AS restaurant_name_en, r.name_bn AS restaurant_name_bn, r.phone AS restaurant_phone,
       o.subtotal_poisha, o.delivery_fee_poisha, o.total_poisha, o.address_line, o.landmark,
       ST_Y(o.delivery_location::geometry) AS lat, ST_X(o.delivery_location::geometry) AS lng,
-      o.delivery_phone, o.ready_in_minutes, o.reject_reason, ${iso('o.created_at')} AS created_at,
+      o.delivery_phone, o.note, o.ready_in_minutes, o.reject_reason, ${iso('o.created_at')} AS created_at,
       o.rider_id, u.name AS rider_name, u.phone AS rider_phone
     FROM orders o
     JOIN restaurants r ON r.id = o.restaurant_id
@@ -110,6 +111,7 @@ export async function loadOrders(db: Executor, ids: string[], viewer: Viewer): P
       rider: row.rider_id
         ? { id: row.rider_id, name: row.rider_name, phone: showRiderPhone ? row.rider_phone : null }
         : null,
+      note: row.note,
       readyInMinutes: row.ready_in_minutes,
       rejectReason: row.reject_reason,
       timeline: events.filter((e) => e.order_id === id).map((e) => ({ event: e.event, at: e.at })),

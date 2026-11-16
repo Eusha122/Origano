@@ -85,6 +85,11 @@ function OrderCard(props: { order: Order }) {
           {quantityLine(item.quantity, locale === 'bn' ? item.nameBn : item.nameEn)}
         </Body>
       ))}
+      {order.note ? (
+        <Body large strong>
+          {order.note}
+        </Body>
+      ) : null}
       <Body large strong>
         {formatMoney(poisha(order.total), locale)}
       </Body>

@@ -60,6 +60,7 @@ export const Order = z.object({
   }),
   customerPhone: z.string().nullable(),
   rider: z.object({ id: z.uuid(), name: z.string().nullable(), phone: z.string().nullable() }).nullable(),
+  note: z.string().nullable(),
   readyInMinutes: z.number().int().nullable(),
   rejectReason: z.enum(REJECT_REASONS).nullable(),
   timeline: z.array(TimelineEntry),

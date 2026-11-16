@@ -62,6 +62,14 @@ describe('placing an order', () => {
     expect(outbox).toEqual([{ topic: 'order.changed', published_at: null }]);
   });
 
+  it("returns the customer's note, or null when there is none", async () => {
+    const token = await t.signIn(CUSTOMER);
+    const withNote = await place(token, orderBody({ note: 'Less spicy' }));
+    expect(withNote.json().note).toBe('Less spicy');
+    const without = await place(token, orderBody(), 'order-key-0002');
+    expect(without.json().note).toBeNull();
+  });
+
   it('a retried request returns the same order', async () => {
     const token = await t.signIn(CUSTOMER);
     const first = await place(token, orderBody());
