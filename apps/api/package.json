@@ -26,6 +26,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@oregano/api-client": "workspace:*",
     "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",
