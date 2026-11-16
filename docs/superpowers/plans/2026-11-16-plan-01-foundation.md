@@ -42,20 +42,22 @@ Each line names an input the book implies but does not spell out. The test that 
 ### Task 1: Workspace and money rules
 
 **Files:**
+
 - Create: `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `biome.json`, `tsconfig.base.json`, `.nvmrc`, `.gitignore`
 - Create: `packages/domain/package.json`, `packages/domain/tsconfig.json`, `packages/domain/src/index.ts`
 - Create: `packages/domain/src/money.ts`
 - Test: `packages/domain/src/money.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces, from `@oregano/domain`:
 
 ```ts
 export type Money = number & { readonly __unit: 'poisha' };
-export function taka(amount: number): Money;            // taka(280) is 28000 poisha
-export function toTaka(amount: Money): number;          // 28000 -> 280
-export function addMoney(...amounts: Money[]): Money;   // addMoney() is 0
+export function taka(amount: number): Money; // taka(280) is 28000 poisha
+export function toTaka(amount: Money): number; // 28000 -> 280
+export function addMoney(...amounts: Money[]): Money; // addMoney() is 0
 export function subtractMoney(a: Money, b: Money): Money;
 export function multiplyMoney(amount: Money, quantity: number): Money;
 export function percentOf(amount: Money, percent: number): Money;
@@ -67,6 +69,7 @@ export function maxMoney(a: Money, b: Money): Money;
 - [ ] **Step 1: Create the branch and workspace files**
 
 Run `git checkout -b plan-01-foundation` and `corepack enable`. Create the root files:
+
 - `pnpm-workspace.yaml` lists `apps/*` and `packages/*`.
 - `.nvmrc` contains `24`.
 - `package.json` is private, sets `"engines": {"node": ">=24"}`, sets `packageManager` to the pnpm version corepack installed, and defines scripts `lint` (`biome check .`), `typecheck` (`turbo run typecheck`), `test` (`turbo run test`).
@@ -154,22 +157,41 @@ git commit -m "feat: workspace scaffold and money rules"
 ### Task 2: Order state machine
 
 **Files:**
+
 - Create: `packages/domain/src/order.ts`
 - Modify: `packages/domain/src/index.ts` (export the new module)
 - Test: `packages/domain/src/order.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces, from `@oregano/domain`:
 
 ```ts
-export const ORDER_STATUSES = ['placed', 'preparing', 'ready', 'on_the_way', 'delivered',
-  'rejected', 'cancelled', 'expired', 'undeliverable'] as const;
+export const ORDER_STATUSES = [
+  'placed',
+  'preparing',
+  'ready',
+  'on_the_way',
+  'delivered',
+  'rejected',
+  'cancelled',
+  'expired',
+  'undeliverable',
+] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export type OrderType = 'delivery' | 'pickup';
 export type OrderActor = 'customer' | 'restaurant' | 'rider' | 'system' | 'admin';
-export type OrderEvent = 'accept' | 'reject' | 'cancel' | 'expire' | 'mark_ready'
-  | 'pick_up' | 'deliver' | 'collect' | 'report_undeliverable';
+export type OrderEvent =
+  | 'accept'
+  | 'reject'
+  | 'cancel'
+  | 'expire'
+  | 'mark_ready'
+  | 'pick_up'
+  | 'deliver'
+  | 'collect'
+  | 'report_undeliverable';
 export const REJECT_REASONS = ['item_out_of_stock', 'too_busy', 'closing_soon'] as const;
 export type TransitionResult =
   | { ok: true; status: OrderStatus }
@@ -184,20 +206,21 @@ export function isTerminal(status: OrderStatus): boolean;
 
 The complete transition table. Anything not listed is `invalid_transition`.
 
-| From | Event | Actor | To | Order type |
-|---|---|---|---|---|
-| placed | accept | restaurant | preparing | both |
-| placed | reject | restaurant | rejected | both |
-| placed | cancel | customer | cancelled | both |
-| placed | expire | system | expired | both |
-| preparing | mark_ready | restaurant | ready | both |
-| ready | pick_up | rider | on_the_way | delivery |
-| ready | collect | restaurant | delivered | pickup |
-| on_the_way | deliver | rider | delivered | delivery |
-| on_the_way | report_undeliverable | rider | undeliverable | delivery |
-| placed, preparing, ready, on_the_way | cancel | admin | cancelled | both |
+| From                                 | Event                | Actor      | To            | Order type |
+| ------------------------------------ | -------------------- | ---------- | ------------- | ---------- |
+| placed                               | accept               | restaurant | preparing     | both       |
+| placed                               | reject               | restaurant | rejected      | both       |
+| placed                               | cancel               | customer   | cancelled     | both       |
+| placed                               | expire               | system     | expired       | both       |
+| preparing                            | mark_ready           | restaurant | ready         | both       |
+| ready                                | pick_up              | rider      | on_the_way    | delivery   |
+| ready                                | collect              | restaurant | delivered     | pickup     |
+| on_the_way                           | deliver              | rider      | delivered     | delivery   |
+| on_the_way                           | report_undeliverable | rider      | undeliverable | delivery   |
+| placed, preparing, ready, on_the_way | cancel               | admin      | cancelled     | both       |
 
 Resolution order inside `transition`:
+
 1. If a row matches status, event, order type and actor, return `ok` with the new status.
 2. Else if a row matches status, event and order type but not the actor, return `actor_not_allowed`.
 3. Else if the event has any row whose "To" equals the current status and whose actor matches, return `already_applied`.
@@ -244,12 +267,18 @@ describe('order state machine', () => {
   it('handles rejection, expiry and failed delivery', () => {
     expect(transition(delivery('placed'), 'reject', 'restaurant')).toEqual({ ok: true, status: 'rejected' });
     expect(transition(delivery('placed'), 'expire', 'system')).toEqual({ ok: true, status: 'expired' });
-    expect(transition(delivery('on_the_way'), 'report_undeliverable', 'rider')).toEqual({ ok: true, status: 'undeliverable' });
+    expect(transition(delivery('on_the_way'), 'report_undeliverable', 'rider')).toEqual({
+      ok: true,
+      status: 'undeliverable',
+    });
   });
 
   it('refuses an actor who may not perform the event', () => {
     expect(transition(delivery('placed'), 'accept', 'customer')).toEqual({ ok: false, reason: 'actor_not_allowed' });
-    expect(transition(delivery('on_the_way'), 'deliver', 'restaurant')).toEqual({ ok: false, reason: 'actor_not_allowed' });
+    expect(transition(delivery('on_the_way'), 'deliver', 'restaurant')).toEqual({
+      ok: false,
+      reason: 'actor_not_allowed',
+    });
     expect(transition(delivery('placed'), 'expire', 'restaurant')).toEqual({ ok: false, reason: 'actor_not_allowed' });
   });
 
@@ -295,11 +324,13 @@ git commit -m "feat: order state machine"
 ### Task 3: Languages and money formatting
 
 **Files:**
+
 - Create: `packages/i18n/package.json`, `packages/i18n/tsconfig.json`, `packages/i18n/src/index.ts`
 - Create: `packages/i18n/src/en.ts`, `packages/i18n/src/bn.ts`, `packages/i18n/src/translate.ts`, `packages/i18n/src/format.ts`
 - Test: `packages/i18n/src/i18n.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Money`, `taka` from `@oregano/domain`.
 - Produces, from `@oregano/i18n`:
 
@@ -314,18 +345,18 @@ export const messages: Record<Locale, Record<MessageKey, string>>;
 
 The starting messages. `{name}` marks a parameter.
 
-| Key | English | Bangla |
-|---|---|---|
-| `brand.promise` | Your town's food, in one place. | শহরের সব খাবার, এক ঠিকানায়। |
-| `action.placeOrder` | Place order | অর্ডার করুন |
-| `action.tryAgain` | Try again | আবার চেষ্টা করুন |
-| `action.continueAsGuest` | Continue as guest | অতিথি হিসেবে দেখুন |
-| `status.offline` | You're offline. Try again. | আপনি অফলাইনে আছেন। আবার চেষ্টা করুন। |
-| `zone.outside` | We don't deliver here yet | আমরা এখনো এখানে ডেলিভারি দিই না |
-| `item.soldOut` | Sold out today | আজ শেষ |
-| `restaurant.opensAt` | Opens at {time} | {time}-এ খুলবে |
-| `restaurant.samePrice` | Same price as in store | দোকানের দামেই |
-| `language.switchTo` | বাংলা | English |
+| Key                      | English                         | Bangla                          |
+| ------------------------ | ------------------------------- | ------------------------------- |
+| `brand.promise`          | Your town's food, in one place. | শহরের সব খাবার, এক ঠিকানায়।         |
+| `action.placeOrder`      | Place order                     | অর্ডার করুন                        |
+| `action.tryAgain`        | Try again                       | আবার চেষ্টা করুন                    |
+| `action.continueAsGuest` | Continue as guest               | অতিথি হিসেবে দেখুন               |
+| `status.offline`         | You're offline. Try again.      | আপনি অফলাইনে আছেন। আবার চেষ্টা করুন। |
+| `zone.outside`           | We don't deliver here yet       | আমরা এখনো এখানে ডেলিভারি দিই না     |
+| `item.soldOut`           | Sold out today                  | আজ শেষ                          |
+| `restaurant.opensAt`     | Opens at {time}                 | {time}-এ খুলবে                   |
+| `restaurant.samePrice`   | Same price as in store          | দোকানের দামেই                     |
+| `language.switchTo`      | বাংলা                             | English                         |
 
 `language.switchTo` is the label of the language toggle, so each locale shows the other language's name.
 
@@ -411,11 +442,13 @@ git commit -m "feat: English and Bangla messages with money formatting"
 ### Task 4: Brand tokens
 
 **Files:**
+
 - Create: `packages/ui/package.json`, `packages/ui/tsconfig.json`, `packages/ui/src/index.ts`
 - Create: `packages/ui/src/tokens.ts`, `packages/ui/src/contrast.ts`
 - Test: `packages/ui/src/tokens.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces, from `@oregano/ui`:
 
@@ -454,8 +487,13 @@ import { colors, contrastRatio, layout, textPairs, typeScale } from './index';
 describe('brand tokens', () => {
   it('match the palette in the brand book exactly', () => {
     expect(colors).toEqual({
-      plum: '#3D1A33', champagne: '#EBC9A0', cream: '#F8EDE6', white: '#FFFFFF',
-      coral: '#E8846B', mutedPlum: '#6B5A63', line: '#EEE6E9',
+      plum: '#3D1A33',
+      champagne: '#EBC9A0',
+      cream: '#F8EDE6',
+      white: '#FFFFFF',
+      coral: '#E8846B',
+      mutedPlum: '#6B5A63',
+      line: '#EEE6E9',
     });
   });
 
@@ -483,7 +521,13 @@ describe('brand tokens', () => {
   });
 
   it('never allows the combinations the book forbids', () => {
-    const forbidden = [['white', 'cream'], ['champagne', 'cream'], ['coral', 'white'], ['coral', 'cream'], ['coral', 'plum']];
+    const forbidden = [
+      ['white', 'cream'],
+      ['champagne', 'cream'],
+      ['coral', 'white'],
+      ['coral', 'cream'],
+      ['coral', 'plum'],
+    ];
     for (const [text, background] of forbidden) {
       expect(textPairs.some((p) => p.text === text && p.background === background)).toBe(false);
     }
@@ -517,6 +561,7 @@ git commit -m "feat: brand tokens with contrast checks"
 ### Task 5: API skeleton
 
 **Files:**
+
 - Create: `apps/api/package.json`, `apps/api/tsconfig.json`
 - Create: `apps/api/src/config.ts`, `apps/api/src/errors.ts`, `apps/api/src/app.ts`, `apps/api/src/server.ts`
 - Create: `apps/api/src/health/routes.ts`
@@ -524,6 +569,7 @@ git commit -m "feat: brand tokens with contrast checks"
 - Test: `apps/api/src/config.test.ts`, `apps/api/src/app.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
 
@@ -531,12 +577,14 @@ git commit -m "feat: brand tokens with contrast checks"
 // config.ts
 export type Config = {
   nodeEnv: 'development' | 'test' | 'production';
-  port: number;            // PORT, default 4000
-  databaseUrl: string;     // DATABASE_URL, must start with postgres:// or postgresql://
-  redisUrl: string;        // REDIS_URL, must start with redis:// or rediss://
-  logLevel: 'debug' | 'info' | 'warn' | 'error';  // LOG_LEVEL, default info
+  port: number; // PORT, default 4000
+  databaseUrl: string; // DATABASE_URL, must start with postgres:// or postgresql://
+  redisUrl: string; // REDIS_URL, must start with redis:// or rediss://
+  logLevel: 'debug' | 'info' | 'warn' | 'error'; // LOG_LEVEL, default info
 };
-export class ConfigError extends Error { readonly problems: string[] }
+export class ConfigError extends Error {
+  readonly problems: string[];
+}
 export function loadConfig(env: Record<string, string | undefined>): Config;
 
 // app.ts
@@ -545,11 +593,16 @@ export function buildApp(deps: { config: Config; checks: ReadinessCheck[] }): Pr
 
 // errors.ts
 export class AppError extends Error {
-  constructor(readonly code: string, readonly statusCode: number, message: string);
+  constructor(
+    readonly code: string,
+    readonly statusCode: number,
+    message: string,
+  );
 }
 ```
 
 HTTP behaviour:
+
 - `GET /healthz` returns 200 `{"status":"ok"}`. It checks nothing, so the host can tell "process alive" from "dependencies ready".
 - `GET /readyz` runs every check with a 2-second timeout each. All pass: 200 `{"status":"ready","checks":{"<name>":"ok"}}`. Any fail: 503 `{"status":"not_ready","checks":{"<name>":"fail"}}`.
 - Every error response has the shape `{"error":{"code":string,"message":string,"requestId":string}}`.
@@ -563,13 +616,20 @@ HTTP behaviour:
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig } from './config';
 
-const valid = { NODE_ENV: 'test', DATABASE_URL: 'postgres://u:p@localhost:5432/oregano', REDIS_URL: 'redis://localhost:6379' };
+const valid = {
+  NODE_ENV: 'test',
+  DATABASE_URL: 'postgres://u:p@localhost:5432/oregano',
+  REDIS_URL: 'redis://localhost:6379',
+};
 
 describe('loadConfig', () => {
   it('applies defaults', () => {
     expect(loadConfig(valid)).toEqual({
-      nodeEnv: 'test', port: 4000, logLevel: 'info',
-      databaseUrl: 'postgres://u:p@localhost:5432/oregano', redisUrl: 'redis://localhost:6379',
+      nodeEnv: 'test',
+      port: 4000,
+      logLevel: 'info',
+      databaseUrl: 'postgres://u:p@localhost:5432/oregano',
+      redisUrl: 'redis://localhost:6379',
     });
   });
 
@@ -604,9 +664,18 @@ import { buildApp } from './app';
 import { loadConfig } from './config';
 import { AppError } from './errors';
 
-const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: 'postgres://u:p@localhost/x', REDIS_URL: 'redis://localhost' });
+const config = loadConfig({
+  NODE_ENV: 'test',
+  DATABASE_URL: 'postgres://u:p@localhost/x',
+  REDIS_URL: 'redis://localhost',
+});
 const pass = { name: 'postgres', check: async () => {} };
-const fail = { name: 'redis', check: async () => { throw new Error('connection refused at 10.0.0.5'); } };
+const fail = {
+  name: 'redis',
+  check: async () => {
+    throw new Error('connection refused at 10.0.0.5');
+  },
+};
 
 describe('api skeleton', () => {
   it('reports alive without touching dependencies', async () => {
@@ -648,8 +717,12 @@ describe('api skeleton', () => {
 
   it('maps AppError to its status and hides unexpected errors', async () => {
     const app = await buildApp({ config, checks: [] });
-    app.get('/known', async () => { throw new AppError('zone_outside', 422, "We don't deliver here yet"); });
-    app.get('/boom', async () => { throw new Error('password=hunter2'); });
+    app.get('/known', async () => {
+      throw new AppError('zone_outside', 422, "We don't deliver here yet");
+    });
+    app.get('/boom', async () => {
+      throw new Error('password=hunter2');
+    });
 
     const known = await app.inject({ method: 'GET', url: '/known' });
     expect(known.statusCode).toBe(422);
@@ -697,6 +770,7 @@ git commit -m "feat: API skeleton with config validation and health checks"
 ### Task 6: Database and the Chapainawabganj zone
 
 **Files:**
+
 - Create: `infra/docker-compose.yml`
 - Create: `apps/api/drizzle.config.ts`, `apps/api/drizzle/` (generated SQL migrations)
 - Create: `apps/api/src/db/client.ts`, `apps/api/src/db/migrate.ts`, `apps/api/src/db/geography.ts`
@@ -706,6 +780,7 @@ git commit -m "feat: API skeleton with config validation and health checks"
 - Test: `apps/api/src/zones/repo.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Config`, `ReadinessCheck` from Task 5; `Money`, `taka` from `@oregano/domain`.
 - Produces:
 
@@ -736,17 +811,17 @@ Local services in `infra/docker-compose.yml`: the official `postgis/postgis` ima
 
 The `zones` table:
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | `uuid` primary key | default `gen_random_uuid()` |
-| `slug` | `text` unique, not null | |
-| `name_en`, `name_bn` | `text` not null | |
-| `boundary` | `geography(Polygon, 4326)` not null | GiST index |
-| `fee_per_km_poisha`, `min_fee_poisha` | `integer` not null | check `>= 0` |
-| `road_factor` | `numeric(3,2)` not null | default `1.30`, check `>= 1` |
-| `timezone` | `text` not null | default `Asia/Dhaka` |
-| `is_active` | `boolean` not null | default `true` |
-| `created_at`, `updated_at` | `timestamptz` not null | default `now()` |
+| Column                                | Type                                | Notes                        |
+| ------------------------------------- | ----------------------------------- | ---------------------------- |
+| `id`                                  | `uuid` primary key                  | default `gen_random_uuid()`  |
+| `slug`                                | `text` unique, not null             |                              |
+| `name_en`, `name_bn`                  | `text` not null                     |                              |
+| `boundary`                            | `geography(Polygon, 4326)` not null | GiST index                   |
+| `fee_per_km_poisha`, `min_fee_poisha` | `integer` not null                  | check `>= 0`                 |
+| `road_factor`                         | `numeric(3,2)` not null             | default `1.30`, check `>= 1` |
+| `timezone`                            | `text` not null                     | default `Asia/Dhaka`         |
+| `is_active`                           | `boolean` not null                  | default `true`               |
+| `created_at`, `updated_at`            | `timestamptz` not null              | default `now()`              |
 
 The first migration also runs `CREATE EXTENSION IF NOT EXISTS postgis`.
 
@@ -780,8 +855,14 @@ describe('zones', () => {
     await seedZones(db);
     const zone = await findZoneForPoint(db, townCentre);
     expect(zone).toMatchObject({
-      slug: 'chapainawabganj', nameEn: 'Chapainawabganj', nameBn: 'চাঁপাইনবাবগঞ্জ',
-      feePerKm: taka(10), minFee: taka(20), roadFactor: 1.3, timezone: 'Asia/Dhaka', isActive: true,
+      slug: 'chapainawabganj',
+      nameEn: 'Chapainawabganj',
+      nameBn: 'চাঁপাইনবাবগঞ্জ',
+      feePerKm: taka(10),
+      minFee: taka(20),
+      roadFactor: 1.3,
+      timezone: 'Asia/Dhaka',
+      isActive: true,
     });
   });
 
@@ -855,6 +936,7 @@ git commit -m "feat: PostGIS database with the Chapainawabganj zone"
 ### Task 7: Customer app shell
 
 **Files:**
+
 - Create: `apps/customer/` (generated by the Expo project creator, default template with Expo Router and TypeScript)
 - Modify: `apps/customer/package.json`, `apps/customer/metro.config.js`, `apps/customer/app.json`
 - Create: `apps/customer/app/_layout.tsx`, `apps/customer/app/index.tsx`
@@ -863,6 +945,7 @@ git commit -m "feat: PostGIS database with the Chapainawabganj zone"
 - Test: `apps/customer/e2e/shell.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `t`, `Locale`, `formatMoney` from `@oregano/i18n`; `colors`, `fonts`, `typeScale`, `layout` from `@oregano/ui`; `taka` from `@oregano/domain`.
 - Produces:
 
@@ -875,6 +958,7 @@ export function useLocale(): { locale: Locale; setLocale: (locale: Locale) => vo
 - Scripts in `apps/customer/package.json`: `dev:web` (start the web dev server on port 8081), `build:web` (static web export to `dist/`), `test:e2e` (Playwright).
 
 The one screen, `app/index.tsx`, on a cream background with 20 px side margins:
+
 - A heading showing `t(locale, 'brand.promise')`, in Fraunces for English and Hind Siliguri for Bangla, 28 px, plum. It has the accessibility role `header`.
 - A line of body text showing `formatMoney(taka(280), locale)`, proving the shared money path works in the app.
 - A full-width button at the bottom, plum with cream text, 14 px corners, at least 48 px tall, labelled `t(locale, 'language.switchTo')`. Pressing it switches the locale between `en` and `bn`.
@@ -952,18 +1036,21 @@ git commit -m "feat: customer app shell on web with English and Bangla"
 ### Task 8: One verify command, CI and project guide
 
 **Files:**
+
 - Modify: root `package.json` (add `verify` and `test:e2e` scripts), `turbo.json`
 - Create: `.github/workflows/ci.yml`
 - Create: `CLAUDE.md`
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Consumes: every script from Tasks 1 to 7.
 - Produces: `pnpm verify`, the single command that later plans use as their completion gate. It runs, in order: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm --filter @oregano/customer build:web`, `pnpm test:e2e`. It stops at the first failure.
 
 `ci.yml` runs on every push and pull request, on Ubuntu with Node 24 and pnpm. It starts PostgreSQL (the `postgis/postgis` image) and Redis as service containers with the same credentials as the compose file, installs with `pnpm install --frozen-lockfile`, installs the Playwright Chromium browser, runs `pnpm db:migrate`, then `pnpm verify`. It also runs `pnpm audit --audit-level high` as a separate job.
 
 `CLAUDE.md` is the guide a future session reads first. It contains, in this order:
+
 1. One paragraph: what Oregano is, and that the book and the blueprint are the sources of truth, with their paths.
 2. The commands: `pnpm db:up`, `pnpm db:migrate`, `pnpm db:seed`, `pnpm verify`, and how to run one package's tests.
 3. The repository layout from blueprint section 5, limited to what exists.
@@ -1000,6 +1087,7 @@ git commit -m "chore: verify gate, CI workflow and project guide"
 ## Completion
 
 Plan 01 is complete when:
+
 - `pnpm verify` exits 0 from a clean clone.
 - The customer shell, opened in a browser, shows the brand promise and switches between English and Bangla.
 - `GET /readyz` returns 200 with both checks `ok`, and 503 when Redis is stopped.

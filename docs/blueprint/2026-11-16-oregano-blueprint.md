@@ -18,14 +18,14 @@ Confirmed by the founder on 16 November 2026.
 
 These are planning estimates, not measurements.
 
-| Quantity | Estimate | Basis |
-|---|---|---|
-| Registered users | 1,000,000 | Design target |
-| Daily active users | 100,000 | 10% of registered |
-| Orders per day | 30,000 | 0.3 per daily active user |
-| Peak orders | about 2 per second | 20% of the day's orders in one hour |
-| Peak API requests | about 300 per second | 50 requests per session |
-| Riders online at peak | about 3,000 | 10 orders per rider per day |
+| Quantity              | Estimate             | Basis                               |
+| --------------------- | -------------------- | ----------------------------------- |
+| Registered users      | 1,000,000            | Design target                       |
+| Daily active users    | 100,000              | 10% of registered                   |
+| Orders per day        | 30,000               | 0.3 per daily active user           |
+| Peak orders           | about 2 per second   | 20% of the day's orders in one hour |
+| Peak API requests     | about 300 per second | 50 requests per session             |
+| Riders online at peak | about 3,000          | 10 orders per rider per day         |
 
 This load fits comfortably on a few ordinary servers and one well-indexed PostgreSQL database. The design goal is therefore correctness and operability, not exotic scale machinery. The system is one deployable backend with strict internal module boundaries (a "modular monolith"), so that a module can be split into its own service later only if measurements demand it.
 
@@ -63,29 +63,29 @@ Rules that hold everywhere:
 
 Exact versions are not pinned here. The executor installs the latest stable release and checks the official documentation before each install.
 
-| Area | Decision | Why | Revisit when |
-|---|---|---|---|
-| Language | TypeScript, strict mode, everywhere | One language across four apps and the server; shared types | Never |
-| Runtime | Node.js 24 LTS | Already installed; long-term support | Next LTS |
-| Repo | pnpm workspaces + Turborepo | Standard for Expo monorepos; cached builds | Never |
-| Lint and format | Biome | One tool instead of two | It lacks a rule we need |
-| Customer, restaurant, rider apps | Expo (React Native) with Expo Router, built for web, Android and iOS | The founder requires one codebase for site and apps | Web bundle exceeds budget (section 10) |
-| Admin dashboard | React + Vite, web only | Dense tables and forms are poor in React Native | Never |
-| API | Fastify, REST under `/v1`, Zod-validated | Old app versions stay in the wild for months; a versioned REST contract tolerates that | Never |
-| Contracts | Zod schemas in `packages/contracts`, used by server and clients | One definition of every request and response | Never |
-| Database | PostgreSQL with PostGIS | Transactions for money and orders; PostGIS for delivery zones | Never |
-| Data access | Drizzle ORM with SQL migrations | Thin, typed, explicit SQL | Never |
-| Cache, queue, pub/sub | Redis with BullMQ | One dependency covers rate limits, timers, fan-out | Queue depth needs a dedicated broker |
-| Real-time | WebSocket from the API, fanned out through Redis pub/sub | Built into React Native; hints only | Never |
-| Push | Firebase Cloud Messaging and Apple Push, through Expo Notifications | Standard path for Expo | Never |
-| SMS | Local Bangladeshi gateway behind an `SmsSender` interface, with a second provider as failover | Local routes are far cheaper than international ones; provider chosen after a delivery test on all four operators | Delivery rate drops |
-| Maps | MapLibre with OpenStreetMap-based tiles behind a `MapProvider` interface | No per-load fees at scale; Barikoi is a candidate for Bangladeshi addresses | Tile quality in a town is poor |
-| Media | S3-compatible object storage + CDN; images resized to WebP at upload | Works on 3G; cheap | Never |
-| Hosting | Docker containers; managed PostgreSQL and Redis; Cloudflare in front | Portable; managed backups | See section 9 |
-| Server tests | Vitest; integration tests against real PostgreSQL | No mocked database | Never |
-| Web end-to-end tests | Playwright | Standard | Never |
-| Native end-to-end tests | Maestro (from Plan 10) | Works with Expo | Never |
-| Errors and tracing | Sentry + OpenTelemetry, structured JSON logs | Find the failing order from a support call | Never |
+| Area                             | Decision                                                                                      | Why                                                                                                               | Revisit when                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Language                         | TypeScript, strict mode, everywhere                                                           | One language across four apps and the server; shared types                                                        | Never                                  |
+| Runtime                          | Node.js 24 LTS                                                                                | Already installed; long-term support                                                                              | Next LTS                               |
+| Repo                             | pnpm workspaces + Turborepo                                                                   | Standard for Expo monorepos; cached builds                                                                        | Never                                  |
+| Lint and format                  | Biome                                                                                         | One tool instead of two                                                                                           | It lacks a rule we need                |
+| Customer, restaurant, rider apps | Expo (React Native) with Expo Router, built for web, Android and iOS                          | The founder requires one codebase for site and apps                                                               | Web bundle exceeds budget (section 10) |
+| Admin dashboard                  | React + Vite, web only                                                                        | Dense tables and forms are poor in React Native                                                                   | Never                                  |
+| API                              | Fastify, REST under `/v1`, Zod-validated                                                      | Old app versions stay in the wild for months; a versioned REST contract tolerates that                            | Never                                  |
+| Contracts                        | Zod schemas in `packages/contracts`, used by server and clients                               | One definition of every request and response                                                                      | Never                                  |
+| Database                         | PostgreSQL with PostGIS                                                                       | Transactions for money and orders; PostGIS for delivery zones                                                     | Never                                  |
+| Data access                      | Drizzle ORM with SQL migrations                                                               | Thin, typed, explicit SQL                                                                                         | Never                                  |
+| Cache, queue, pub/sub            | Redis with BullMQ                                                                             | One dependency covers rate limits, timers, fan-out                                                                | Queue depth needs a dedicated broker   |
+| Real-time                        | WebSocket from the API, fanned out through Redis pub/sub                                      | Built into React Native; hints only                                                                               | Never                                  |
+| Push                             | Firebase Cloud Messaging and Apple Push, through Expo Notifications                           | Standard path for Expo                                                                                            | Never                                  |
+| SMS                              | Local Bangladeshi gateway behind an `SmsSender` interface, with a second provider as failover | Local routes are far cheaper than international ones; provider chosen after a delivery test on all four operators | Delivery rate drops                    |
+| Maps                             | MapLibre with OpenStreetMap-based tiles behind a `MapProvider` interface                      | No per-load fees at scale; Barikoi is a candidate for Bangladeshi addresses                                       | Tile quality in a town is poor         |
+| Media                            | S3-compatible object storage + CDN; images resized to WebP at upload                          | Works on 3G; cheap                                                                                                | Never                                  |
+| Hosting                          | Docker containers; managed PostgreSQL and Redis; Cloudflare in front                          | Portable; managed backups                                                                                         | See section 9                          |
+| Server tests                     | Vitest; integration tests against real PostgreSQL                                             | No mocked database                                                                                                | Never                                  |
+| Web end-to-end tests             | Playwright                                                                                    | Standard                                                                                                          | Never                                  |
+| Native end-to-end tests          | Maestro (from Plan 10)                                                                        | Works with Expo                                                                                                   | Never                                  |
+| Errors and tracing               | Sentry + OpenTelemetry, structured JSON logs                                                  | Find the failing order from a support call                                                                        | Never                                  |
 
 ## 5. Repository layout
 
@@ -113,23 +113,23 @@ Three separate Expo apps, not one app with roles. Each has its own store listing
 
 Each module lives in `apps/api/src/<module>/` with `routes.ts`, `service.ts`, `repo.ts` and `events.ts`. A module may call another module's service. It may never read or write another module's tables.
 
-| Module | Owns |
-|---|---|
-| identity | Phone OTP, sessions, roles, staff membership |
-| zones | Delivery areas, fee settings, per-zone business settings |
-| catalog | Restaurants, hours, menus, items, options, availability, discounts, search |
-| onboarding | Restaurant applications, rider verification, approval queue |
-| cart | Carts and Hangout (group) carts |
-| ordering | Orders, the order state machine, the order event log |
-| dispatch | Rider availability, offers, assignment, reassignment |
-| ledger | Double-entry money records, payments, transaction IDs |
-| billing | Commission, monthly statements, unpaid-listing pause |
-| referrals | Codes, unlock rules, abuse flags |
-| ratings | Stars, tags, comments |
-| notifications | Push, SMS, WhatsApp, in-app; per-user preferences |
-| media | Uploads, resizing, signed URLs |
-| growth | QR links, install attribution, monthly restaurant report |
-| admin | Support lookup, notes, audit log |
+| Module        | Owns                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| identity      | Phone OTP, sessions, roles, staff membership                               |
+| zones         | Delivery areas, fee settings, per-zone business settings                   |
+| catalog       | Restaurants, hours, menus, items, options, availability, discounts, search |
+| onboarding    | Restaurant applications, rider verification, approval queue                |
+| cart          | Carts and Hangout (group) carts                                            |
+| ordering      | Orders, the order state machine, the order event log                       |
+| dispatch      | Rider availability, offers, assignment, reassignment                       |
+| ledger        | Double-entry money records, payments, transaction IDs                      |
+| billing       | Commission, monthly statements, unpaid-listing pause                       |
+| referrals     | Codes, unlock rules, abuse flags                                           |
+| ratings       | Stars, tags, comments                                                      |
+| notifications | Push, SMS, WhatsApp, in-app; per-user preferences                          |
+| media         | Uploads, resizing, signed URLs                                             |
+| growth        | QR links, install attribution, monthly restaurant report                   |
+| admin         | Support lookup, notes, audit log                                           |
 
 ## 6. Core domain decisions
 
@@ -143,17 +143,17 @@ All money movement is recorded in a double-entry ledger (every entry debits one 
 
 Status is one explicit value. The tracking timeline is read from the event log, not from status.
 
-| Status | Meaning |
-|---|---|
-| placed | Customer confirmed; restaurant alerted |
-| preparing | Restaurant accepted and set a ready time |
-| ready | Food packed |
-| on_the_way | Rider has the food (delivery orders only) |
-| delivered | Handed over (or collected, for pickup) |
-| rejected | Restaurant declined with a reason |
-| cancelled | Customer cancelled before acceptance, or admin cancelled |
-| expired | Restaurant did not answer in time |
-| undeliverable | Rider could not hand over; food returned |
+| Status        | Meaning                                                  |
+| ------------- | -------------------------------------------------------- |
+| placed        | Customer confirmed; restaurant alerted                   |
+| preparing     | Restaurant accepted and set a ready time                 |
+| ready         | Food packed                                              |
+| on_the_way    | Rider has the food (delivery orders only)                |
+| delivered     | Handed over (or collected, for pickup)                   |
+| rejected      | Restaurant declined with a reason                        |
+| cancelled     | Customer cancelled before acceptance, or admin cancelled |
+| expired       | Restaurant did not answer in time                        |
+| undeliverable | Rider could not hand over; food returned                 |
 
 The book's "Accepted" step is the event that moves an order from placed to preparing. The customer sees it in the timeline with its time.
 
@@ -206,14 +206,14 @@ Target: OWASP Application Security Verification Standard, level 2.
 
 ## 9. Growth stages
 
-| | Stage 1: one town | Stage 2: several districts | Stage 3: national |
-|---|---|---|---|
-| Users | up to 10,000 | up to 100,000 | 1M+ |
-| API | 2 small copies | 3 to 4 copies, autoscaled | autoscaled, worker pool separate |
-| PostgreSQL | 1 managed instance, daily backup + point-in-time recovery | larger instance + 1 read replica | read replicas, partition order and ledger tables by month |
-| Redis | 1 small managed instance | same, larger | separate instances for queue and cache |
-| Search | PostgreSQL full-text and trigram | same | dedicated search service if measured slow |
-| What triggers the move | n/a | CPU or connection pressure at peak | replica lag or table size hurting queries |
+|                        | Stage 1: one town                                         | Stage 2: several districts         | Stage 3: national                                         |
+| ---------------------- | --------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
+| Users                  | up to 10,000                                              | up to 100,000                      | 1M+                                                       |
+| API                    | 2 small copies                                            | 3 to 4 copies, autoscaled          | autoscaled, worker pool separate                          |
+| PostgreSQL             | 1 managed instance, daily backup + point-in-time recovery | larger instance + 1 read replica   | read replicas, partition order and ledger tables by month |
+| Redis                  | 1 small managed instance                                  | same, larger                       | separate instances for queue and cache                    |
+| Search                 | PostgreSQL full-text and trigram                          | same                               | dedicated search service if measured slow                 |
+| What triggers the move | n/a                                                       | CPU or connection pressure at peak | replica lag or table size hurting queries                 |
 
 No stage needs a rewrite. Region default is Singapore, to be confirmed by measuring latency from Chapainawabganj on Grameenphone, Robi and Banglalink against Mumbai before launch.
 
@@ -230,15 +230,15 @@ No stage needs a rewrite. Region default is Singapore, to be confirmed by measur
 
 The book leaves these blank. Each is a per-zone setting the admin can change.
 
-| Setting | Default |
-|---|---|
-| Restaurant no-answer auto-cancel | 5 minutes |
-| No-rider admin alert | 5 minutes |
-| Unpaid statement pauses listing | 14 days after the statement date |
-| Referral discount cap | Tk 50 |
-| Promotional pushes | at most 2 per week |
-| Delivery fee per km | Tk 10 |
-| Minimum delivery fee | Tk 20 |
+| Setting                          | Default                          |
+| -------------------------------- | -------------------------------- |
+| Restaurant no-answer auto-cancel | 5 minutes                        |
+| No-rider admin alert             | 5 minutes                        |
+| Unpaid statement pauses listing  | 14 days after the statement date |
+| Referral discount cap            | Tk 50                            |
+| Promotional pushes               | at most 2 per week               |
+| Delivery fee per km              | Tk 10                            |
+| Minimum delivery fee             | Tk 20                            |
 
 ## 12. Open questions for the founder
 
