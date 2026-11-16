@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { catalogRoutes } from './catalog/routes';
 import type { Config } from './config';
 import type { Db } from './db/client';
 import { AppError } from './errors';
@@ -84,6 +85,7 @@ export async function buildApp(deps: {
     await app.register(
       async (v1) => {
         identityRoutes(v1, config, services);
+        catalogRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services.otpSender);
       },
       { prefix: '/v1' },
