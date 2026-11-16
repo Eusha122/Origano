@@ -77,7 +77,7 @@ export class RealtimeHub {
 
   register(app: FastifyInstance, authenticate: (token: string) => Promise<AuthUser | null>): void {
     app.register(async (scope) => {
-      await scope.register(websocket);
+      await scope.register(websocket, { options: { maxPayload: 4096 } });
       scope.get('/v1/realtime', { websocket: true }, (socket) => {
         this.sockets.add(socket);
         let state: 'waiting' | 'authenticating' | 'ready' = 'waiting';

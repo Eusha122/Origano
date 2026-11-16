@@ -113,4 +113,11 @@ describe('realtime websocket', () => {
     wrong.send(JSON.stringify({ type: 'auth', token: 'not-a-token' }));
     expect(await closeCode(wrong)).toBe(4401);
   });
+
+  it('closes an unauthenticated socket that sends an oversized frame', async () => {
+    const ws = new WebSocket(url());
+    await opened(ws);
+    ws.send('x'.repeat(10_000));
+    expect(await closeCode(ws)).toBe(1009);
+  });
 });

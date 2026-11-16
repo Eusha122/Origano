@@ -33,7 +33,7 @@ export function startRelay(
   opts: { intervalMs?: number } = {},
 ): { stop: () => Promise<void> } {
   const intervalMs = opts.intervalMs ?? 250;
-  const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+  const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, commandTimeout: 5000 });
   redis.on('error', (error) => console.error('relay redis error', error.message));
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
