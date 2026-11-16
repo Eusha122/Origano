@@ -38,6 +38,7 @@ The thinnest complete order: sign in by OTP (code printed to the server log, no 
 
 Real SMS through two providers, all OTP limits from blueprint section 7, session rotation with reuse detection, roles and staff management, the restaurant application form and approval queue, rider verification with document upload, agency accounts, account states.
 **Done when:** a restaurant and a rider can each go from application to approved without database access, and the OTP limits are proven by tests.
+**Must include (from the Plan 02 security review):** OTP requests capped per phone and per IP address per hour and per day, not only a 60-second resend gap; wrong-attempt counts that survive a new code request (today a new request resets them, which allows unbounded guessing); a production refusal to start with the logging OTP sender; and a unique constraint so one phone has at most one live challenge. The API must not be exposed to the internet before these land.
 
 ### Plan 04: Catalog and zones, complete
 
