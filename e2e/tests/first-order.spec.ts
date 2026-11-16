@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { type APIRequestContext, type Browser, type BrowserContext, expect, type Page, test } from '@playwright/test';
+import {
+  type APIRequestContext,
+  type Browser,
+  type BrowserContext,
+  expect,
+  type Page,
+  type Request as PlaywrightRequest,
+  test,
+} from '@playwright/test';
 import { API_URL, APP_URLS, adminOrders, bearer, PHONES, signInWithApi, signInWithForm } from '../journey';
 
 /** Live updates must arrive through the realtime hint: the 15-second poll alone would miss this. */
@@ -99,14 +107,53 @@ test('double-tapping Place order creates one order', async ({ browser, request }
   const adminToken = await signInWithApi(request, PHONES.admin);
   const before = await adminOrders(request, adminToken);
 
+  const newOrders = async () => {
+    const after = await adminOrders(request, adminToken);
+    return after.filter((row) => !before.some((old) => old.id === row.id));
+  };
+
   const customer = await openApp(browser, APP_URLS.customer);
   await customerToCheckout(customer, request, { add: 'Cold Coffee', times: 1, cart: /^1 items · Tk 180/ });
-  await customer.getByRole('button', { name: 'Place order · Tk 200', exact: true }).dblclick();
-  const number = await orderNumber(customer);
 
-  const after = await adminOrders(request, adminToken);
-  const added = after.filter((row) => !before.some((old) => old.id === row.id));
-  expect(added.map((row) => row.number)).toEqual([number]);
+  // Every place-order request the page sends, whatever the button does with the second tap.
+  const posts: PlaywrightRequest[] = [];
+  customer.on('request', (sent) => {
+    if (sent.method() === 'POST' && new URL(sent.url()).pathname === '/v1/orders') posts.push(sent);
+  });
+  // Hold the first request at the network until the second tap has landed, so the second tap is a real
+  // tap on the still-visible button while the first is in flight, never a click lost to navigation.
+  let release = (): void => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await customer.route(`${API_URL}/v1/orders`, async (route) => {
+    if (route.request().method() === 'POST') await held;
+    await route.continue();
+  });
+
+  const place = customer.getByRole('button', { name: 'Place order · Tk 200', exact: true });
+  await place.click();
+  await expect.poll(() => posts.length).toBe(1);
+  // The second tap reaches the DOM (force skips Playwright's own enabled check) while the first is in flight.
+  const disabledAtSecondTap = (await place.getAttribute('aria-disabled')) === 'true';
+  await place.click({ force: true });
+  release();
+
+  const number = await orderNumber(customer);
+  // Every request the page sent has been answered, so every order it could have made is committed.
+  await Promise.all(posts.map((sent) => sent.response()));
+  const keys = posts.map((sent) => sent.headers()['idempotency-key']);
+  expect(keys[0]).toMatch(/^.{8,64}$/);
+  if (posts.length === 1) {
+    // Only one request: that is right only because the button was busy and disabled when the tap landed.
+    expect(disabledAtSecondTap).toBe(true);
+  } else {
+    // The app sent the tap again: it must be the same attempt, under the same key.
+    expect(new Set(keys).size).toBe(1);
+  }
+  await expect.poll(async () => (await newOrders()).length, { timeout: 5000 }).toBe(1);
+  await expect(customer.getByRole('heading', { name: `Order #${number}`, exact: true })).toBeVisible();
+  await expect.poll(async () => (await newOrders()).map((row) => row.number), { timeout: 5000 }).toEqual([number]);
 });
 
 test('a retried place-order request returns the same order', async ({ request }) => {
