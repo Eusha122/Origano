@@ -1,5 +1,6 @@
 import { buildApp } from './app';
 import { type Config, ConfigError, loadConfig } from './config';
+import { createDb, postgresCheck, redisCheck } from './db/client';
 
 async function main(): Promise<void> {
   let config: Config;
@@ -13,10 +14,12 @@ async function main(): Promise<void> {
     throw error;
   }
 
-  const app = await buildApp({ config, checks: [] });
+  const { db, close } = createDb(config.databaseUrl);
+  const app = await buildApp({ config, checks: [postgresCheck(db), redisCheck(config.redisUrl)] });
 
   const shutdown = async (): Promise<void> => {
     await app.close();
+    await close();
     process.exit(0);
   };
   process.on('SIGTERM', shutdown);
