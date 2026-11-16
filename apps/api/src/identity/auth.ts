@@ -37,7 +37,11 @@ export function requireUser(request: FastifyRequest): AuthUser {
 export function requireRole(request: FastifyRequest, role: 'restaurant' | 'rider' | 'admin'): AuthUser {
   const user = requireUser(request);
   const allowed =
-    role === 'restaurant' ? user.restaurantIds.length > 0 : role === 'rider' ? user.rider !== null : user.isAdmin;
+    role === 'restaurant'
+      ? user.restaurantIds.length > 0
+      : role === 'rider'
+        ? user.rider?.status === 'approved'
+        : user.isAdmin;
   if (!allowed) throw new AppError('forbidden', 403, 'You cannot do that.');
   return user;
 }

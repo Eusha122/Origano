@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { catalogRoutes } from './catalog/routes';
 import type { Config } from './config';
 import type { Db } from './db/client';
+import { dispatchRoutes } from './dispatch/routes';
 import { AppError } from './errors';
 import { healthRoutes, type ReadinessCheck } from './health/routes';
 import { registerAuth } from './identity/auth';
@@ -90,6 +91,7 @@ export async function buildApp(deps: {
         catalogRoutes(v1, services);
         orderRoutes(v1, services);
         restaurantRoutes(v1, services);
+        dispatchRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services.otpSender);
       },
       { prefix: '/v1' },
