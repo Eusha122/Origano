@@ -16,13 +16,18 @@
     "db:seed": "pnpm --filter @oregano/api db:seed",
     "test:e2e": "turbo run test:e2e",
     "build:web": "pnpm --filter @oregano/customer build:web",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build:web && pnpm test:e2e"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build:web && pnpm test:e2e",
+    "prepare": "simple-git-hooks"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",
     "@types/node": "^26.6.6",
+    "simple-git-hooks": "^2.14.0",
     "turbo": "^2.11.11",
     "typescript": "~6.0.3",
     "vitest": "^5.1.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec biome check --staged --no-errors-on-unmatched"
   }
 }
