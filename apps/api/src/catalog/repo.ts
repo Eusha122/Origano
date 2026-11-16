@@ -1,6 +1,6 @@
 import { type Money, poisha } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import type { Db, Executor } from '../db/client';
 
 type Point = { lat: number; lng: number };
 
@@ -134,7 +134,7 @@ export type RestaurantForOrder = {
   location: { lat: number; lng: number };
 };
 
-export async function getRestaurantForOrder(db: Db, id: string): Promise<RestaurantForOrder | null> {
+export async function getRestaurantForOrder(db: Executor, id: string): Promise<RestaurantForOrder | null> {
   const rows = await db.execute<{
     id: string;
     zone_id: string;
@@ -161,7 +161,7 @@ export async function getRestaurantForOrder(db: Db, id: string): Promise<Restaur
 
 /** The requested items that belong to this restaurant. Unknown ids and other restaurants' items are left out. */
 export async function getMenuItems(
-  db: Db,
+  db: Executor,
   restaurantId: string,
   ids: string[],
 ): Promise<{ id: string; restaurantId: string; nameEn: string; nameBn: string; price: Money; isAvailable: boolean }[]> {
@@ -191,7 +191,7 @@ export async function getMenuItems(
 }
 
 /** Straight-line distance in meters between two points (PostGIS geography). */
-export async function distanceMeters(db: Db, from: Point, to: Point): Promise<number> {
+export async function distanceMeters(db: Executor, from: Point, to: Point): Promise<number> {
   const rows = await db.execute<{ d: number }>(sql`
     SELECT ST_Distance(
       ST_SetSRID(ST_MakePoint(${from.lng}, ${from.lat}), 4326)::geography,

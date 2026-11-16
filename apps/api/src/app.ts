@@ -10,6 +10,7 @@ import { registerAuth } from './identity/auth';
 import { devRoutes } from './identity/dev-routes';
 import type { OtpSender } from './identity/otp';
 import { identityRoutes } from './identity/routes';
+import { orderRoutes } from './ordering/routes';
 
 export type { ReadinessCheck } from './health/routes';
 
@@ -86,6 +87,7 @@ export async function buildApp(deps: {
       async (v1) => {
         identityRoutes(v1, config, services);
         catalogRoutes(v1, services);
+        orderRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services.otpSender);
       },
       { prefix: '/v1' },

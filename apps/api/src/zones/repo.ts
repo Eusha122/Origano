@@ -1,6 +1,6 @@
 import { type Money, poisha } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import type { Executor } from '../db/client';
 
 export type Zone = {
   id: string;
@@ -32,7 +32,7 @@ function assertCoordinates(lat: number, lng: number): void {
 }
 
 /** The active zone that covers the point, or null. Overlapping zones resolve to the smallest one. */
-export async function findZoneForPoint(db: Db, point: { lat: number; lng: number }): Promise<Zone | null> {
+export async function findZoneForPoint(db: Executor, point: { lat: number; lng: number }): Promise<Zone | null> {
   assertCoordinates(point.lat, point.lng);
   const rows = await db.execute<ZoneRow>(sql`
     SELECT id, slug, name_en, name_bn, fee_per_km_poisha, min_fee_poisha, road_factor, timezone, is_active
