@@ -198,7 +198,7 @@ describe('placing an order', () => {
     const second = (await place(token, orderBody(), 'list-key-0002')).json();
     await place(await t.signIn(SECOND_CUSTOMER), orderBody(), 'list-key-0003');
     const res = await t.app().inject({ method: 'GET', url: '/v1/orders', headers: t.as(token) });
-    expect(res.json().map((o: { id: string }) => o.id)).toEqual([second.id, first.id]);
+    expect(res.json().orders.map((o: { id: string }) => o.id)).toEqual([second.id, first.id]);
   });
 
   it('a customer can cancel until the restaurant accepts', async () => {

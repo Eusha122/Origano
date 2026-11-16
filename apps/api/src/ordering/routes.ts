@@ -26,10 +26,10 @@ export function orderRoutes(app: FastifyInstance, { db }: Services): void {
     return result.body;
   });
 
-  app.get('/orders', async (request): Promise<Order[]> => {
+  app.get('/orders', async (request): Promise<{ orders: Order[] }> => {
     const user = requireUser(request);
     const ids = await listCustomerOrderIds(db, user.id, 50);
-    return loadOrders(db, ids, { kind: 'customer', userId: user.id });
+    return { orders: await loadOrders(db, ids, { kind: 'customer', userId: user.id }) };
   });
 
   app.get<{ Params: { id: string } }>('/orders/:id', async (request): Promise<Order> => {
