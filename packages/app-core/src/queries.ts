@@ -25,3 +25,11 @@ export async function handleOrderHint(client: QueryClient, orderId: string): Pro
     client.invalidateQueries({ queryKey: queryKeys.offers }),
   ]);
 }
+
+/**
+ * What a realtime 4401 does: check the session again. If the token was revoked, me answers 401 and
+ * useSession signs out, which also closes the socket; if authentication was only slow, nothing changes.
+ */
+export async function handleAuthFailed(client: QueryClient): Promise<void> {
+  await client.invalidateQueries({ queryKey: queryKeys.me, exact: true });
+}

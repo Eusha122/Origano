@@ -3,6 +3,9 @@ import { RealtimeServerMessage } from '@oregano/contracts';
 export type RealtimeStatus = 'connecting' | 'live' | 'offline';
 
 /** Seconds to wait before each reconnect attempt; the last value repeats forever. */
+/** The hub closes with this code when a token is refused or authentication takes longer than 5 seconds. */
+const AUTH_FAILED_CLOSE_CODE = 4401;
+
 export const RECONNECT_BACKOFF_SECONDS = [1, 2, 4, 8, 15] as const;
 
 /**
@@ -10,12 +13,15 @@ export const RECONNECT_BACKOFF_SECONDS = [1, 2, 4, 8, 15] as const;
  * Hints only say "this order changed"; callers refetch. Reconnects with backoff until close().
  * With no token there is nothing to authenticate, so it stays offline and does not retry;
  * the caller reconnects by calling connectRealtime again once a token exists.
+ * A 4401 close calls onAuthFailed so the caller can check whether the session is still valid.
+ * It still reconnects, because the hub also sends 4401 when authentication merely takes too long.
  */
 export function connectRealtime(opts: {
   url: string;
   getToken: () => string | null;
   onHint: (orderId: string) => void;
   onStatus?: (s: RealtimeStatus) => void;
+  onAuthFailed?: () => void;
   WebSocketImpl?: typeof WebSocket;
 }): { close: () => void } {
   const Impl = opts.WebSocketImpl ?? globalThis.WebSocket;
@@ -75,11 +81,13 @@ export function connectRealtime(opts: {
     };
     // A failed socket always closes afterwards, so reconnecting happens in onclose only.
     ws.onerror = () => {};
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (socket === ws) socket = null;
       if (closed) return;
       setStatus('offline');
-      scheduleReconnect();
+      if (event.code === AUTH_FAILED_CLOSE_CODE) opts.onAuthFailed?.();
+      // The callback may have closed the connection.
+      if (!closed) scheduleReconnect();
     };
   }
 

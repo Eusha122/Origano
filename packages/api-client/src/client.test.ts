@@ -54,4 +54,17 @@ describe('api client without a server', () => {
     expect(url).toBe('http://api.test/v1/orders');
     expect(seen?.get('authorization')).toBe('Bearer tok');
   });
+
+  it('gives up on a request that hangs and reports it as a network failure', async () => {
+    const hanging: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      });
+    const client = createApiClient({ baseUrl: 'http://api.test', getToken: () => null, fetch: hanging, timeoutMs: 50 });
+    const started = Date.now();
+    const error = await client.restaurants().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 0, code: 'internal' });
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
 });

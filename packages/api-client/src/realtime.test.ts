@@ -10,7 +10,7 @@ class FakeSocket {
   sent: string[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: unknown }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event: { code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   constructor(readonly url: string) {
     FakeSocket.instances.push(this);
@@ -28,9 +28,9 @@ class FakeSocket {
   receive(message: unknown) {
     this.onmessage?.({ data: JSON.stringify(message) });
   }
-  drop() {
+  drop(code = 1006) {
     this.readyState = 3;
-    this.onclose?.();
+    this.onclose?.({ code });
   }
 }
 
@@ -94,5 +94,26 @@ describe('connectRealtime with a fake socket', () => {
     expect(FakeSocket.instances).toHaveLength(3);
     expect(vi.getTimerCount()).toBe(0);
     expect(statuses).toEqual(['connecting', 'live', 'offline', 'connecting', 'offline', 'connecting', 'offline']);
+  });
+
+  it('reports a 4401 close as an auth failure and keeps reconnecting', () => {
+    vi.useFakeTimers();
+    const onAuthFailed = vi.fn();
+    const conn = connectRealtime({
+      url: 'ws://x',
+      getToken: () => 'tok',
+      onHint: () => {},
+      onAuthFailed,
+      WebSocketImpl: Impl,
+    });
+    FakeSocket.instances[0]?.drop(1006);
+    expect(onAuthFailed).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    FakeSocket.instances[1]?.drop(4401);
+    expect(onAuthFailed).toHaveBeenCalledTimes(1);
+    // A slow authentication also closes with 4401, so the connection still retries.
+    vi.advanceTimersByTime(2000);
+    expect(FakeSocket.instances).toHaveLength(3);
+    conn.close();
   });
 });

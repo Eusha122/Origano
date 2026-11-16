@@ -110,18 +110,53 @@ export function useApi(): ApiClient {
   return useApiContext().api;
 }
 
-export function useSession(): {
+export type SessionState = {
   me: Me | null;
   isLoading: boolean;
+  /** True while a token is stored, even if me cannot load (offline): do not show sign-in then. */
+  isSignedIn: boolean;
+  /** Why me failed to load, if it did; status 0 means offline. */
+  error: ApiError | null;
+};
+
+/** Session state from the stored token and the me query. `expired` means the server refused the token. */
+export function deriveSession(input: {
+  token: string | null;
+  data: Me | undefined;
+  error: unknown;
+  isPending: boolean;
+}): SessionState & { expired: boolean } {
+  if (input.token === null) return { me: null, isLoading: false, isSignedIn: false, error: null, expired: false };
+  const error =
+    input.error instanceof ApiError
+      ? input.error
+      : input.error
+        ? new ApiError(0, 'internal', String(input.error), '')
+        : null;
+  return {
+    me: input.data ?? null,
+    isLoading: input.isPending && error === null,
+    isSignedIn: true,
+    error,
+    expired: error?.status === 401,
+  };
+}
+
+export function useSession(): SessionState & {
   signIn(phone: string, code: string): Promise<void>;
   signOut(): Promise<void>;
 } {
   const { api, token, setToken } = useApiContext();
   const queryClient = useQueryClient();
   const meQuery = useQuery({ queryKey: queryKeys.me, queryFn: () => api.me(), enabled: token !== null });
+  const { expired, ...state } = deriveSession({
+    token,
+    data: meQuery.data,
+    error: meQuery.error,
+    isPending: meQuery.isPending,
+  });
 
   // A stored token the server no longer accepts is dropped, which signs the user out.
-  const expired = meQuery.error instanceof ApiError && meQuery.error.status === 401;
   useEffect(() => {
     if (expired) {
       setToken(null);
@@ -149,10 +184,5 @@ export function useSession(): {
     queryClient.clear();
   }, [api, queryClient, setToken]);
 
-  return {
-    me: token === null ? null : (meQuery.data ?? null),
-    isLoading: token !== null && meQuery.isPending,
-    signIn,
-    signOut,
-  };
+  return { ...state, signIn, signOut };
 }

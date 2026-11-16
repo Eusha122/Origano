@@ -57,13 +57,36 @@ const AdminOrders = z.object({ orders: z.array(AdminOrderRow) });
 
 type Request = { method: 'GET' | 'POST'; path: string; body?: unknown; headers?: Record<string, string> };
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+  // Older React Native engines lack AbortSignal.timeout.
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
+
+/** No response, a dropped connection or a timeout: all are status 0, which the apps show as offline. */
+function networkError(error: unknown, signal: AbortSignal): ApiError {
+  const message = signal.aborted
+    ? 'The request timed out'
+    : error instanceof Error
+      ? error.message
+      : 'Network request failed';
+  return new ApiError(0, 'internal', message, '');
+}
+
 export function createApiClient(opts: {
   baseUrl: string;
   getToken: () => string | null;
   fetch?: typeof fetch;
+  /** Abort a request (including reading its body) after this long; a weak 3G link must not spin forever. */
+  timeoutMs?: number;
 }): ApiClient {
   const base = opts.baseUrl.replace(/\/+$/, '');
   const doFetch = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   async function send(req: Request): Promise<{ status: number; requestId: string; json: unknown }> {
     const headers: Record<string, string> = { accept: 'application/json', ...req.headers };
@@ -72,19 +95,26 @@ export function createApiClient(opts: {
     // Fastify rejects an empty body sent as JSON, so the content type goes only with a body.
     if (req.body !== undefined) headers['content-type'] = 'application/json';
 
+    const signal = timeoutSignal(timeoutMs);
     let res: Response;
     try {
       res = await doFetch(`${base}${req.path}`, {
         method: req.method,
         headers,
         body: req.body === undefined ? undefined : JSON.stringify(req.body),
+        signal,
       });
     } catch (error) {
-      throw new ApiError(0, 'internal', error instanceof Error ? error.message : 'Network request failed', '');
+      throw networkError(error, signal);
     }
 
     const requestId = res.headers.get('x-request-id') ?? '';
-    const text = await res.text().catch(() => '');
+    let text: string;
+    try {
+      text = await res.text();
+    } catch (error) {
+      throw networkError(error, signal);
+    }
     let json: unknown = null;
     if (text !== '') {
       try {

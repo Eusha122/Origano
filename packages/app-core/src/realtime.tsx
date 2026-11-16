@@ -1,7 +1,7 @@
 import { connectRealtime, type RealtimeStatus } from '@oregano/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { handleOrderHint } from './queries';
+import { handleAuthFailed, handleOrderHint } from './queries';
 import { useApiContext } from './session';
 
 /**
@@ -22,6 +22,7 @@ export function useRealtimeHints(): RealtimeStatus {
       url: realtimeUrl,
       getToken: () => token,
       onHint: (orderId) => void handleOrderHint(queryClient, orderId),
+      onAuthFailed: () => void handleAuthFailed(queryClient),
       onStatus: setStatus,
     });
     return () => connection.close();
