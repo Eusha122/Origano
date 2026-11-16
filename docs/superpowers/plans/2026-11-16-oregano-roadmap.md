@@ -54,6 +54,7 @@ Map pin with landmark and saved addresses, home, search, restaurant page, item o
 
 Every row of the book's "when something goes wrong" table: rejection with reason and similar restaurants, auto-cancel, item sold out after ordering, offer waves and no-rider alerts, rider delay, customer unreachable, manual reassignment. The full notification table in book section 11, including the layered restaurant alert from blueprint section 8.
 **Done when:** each failure row has a test that triggers it and checks what each party sees.
+**Must include (from the Plan 02 review):** before adding manual reassignment, move the "is this rider holding the order" check for pick-up and deliver inside `applyTransition`'s row lock, so a rider who lost an order can never act on it. Decide with the founder what happens to an order held by a rider who is suspended mid-delivery.
 
 ### Plan 07: Money
 
