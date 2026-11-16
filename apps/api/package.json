@@ -10,7 +10,7 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
-    "db:seed": "tsx --env-file-if-exists=.env src/zones/seed-cli.ts"
+    "db:seed": "tsx --env-file-if-exists=.env src/dev/seed-cli.ts"
   },
   "dependencies": {
     "@oregano/domain": "workspace:*",

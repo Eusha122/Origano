@@ -1,5 +1,5 @@
 import { createDb } from '../db/client';
-import { seedZones } from './seed';
+import { seedDemo } from './seed-demo';
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -8,8 +8,8 @@ if (!url) {
 }
 const { db, close } = createDb(url);
 try {
-  await seedZones(db);
-  console.log('zones seeded');
+  await seedDemo(db);
+  console.log('demo data seeded');
 } finally {
   await close();
 }
