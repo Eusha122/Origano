@@ -15,15 +15,22 @@ export class ConfigError extends Error {
   }
 }
 
+function isUsableUrl(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+  return new URL(value).hostname !== '';
+}
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production'], { error: 'must be development, test or production' }),
   PORT: z.coerce.number({ error: 'must be a number' }).int().min(1).max(65535).default(4000),
   DATABASE_URL: z
     .string({ error: 'is required' })
-    .regex(/^postgres(ql)?:\/\//, { error: 'must start with postgres:// or postgresql://' }),
+    .regex(/^postgres(ql)?:\/\//, { error: 'must start with postgres:// or postgresql://' })
+    .refine(isUsableUrl, { error: 'must be a valid URL with a host' }),
   REDIS_URL: z
     .string({ error: 'is required' })
-    .regex(/^rediss?:\/\//, { error: 'must start with redis:// or rediss://' }),
+    .regex(/^rediss?:\/\//, { error: 'must start with redis:// or rediss://' })
+    .refine(isUsableUrl, { error: 'must be a valid URL with a host' }),
   LOG_LEVEL: z
     .enum(['debug', 'info', 'warn', 'error'], { error: 'must be debug, info, warn or error' })
     .default('info'),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addMoney, maxMoney, multiplyMoney, percentOf, subtractMoney, taka, toTaka } from './money';
+import { addMoney, maxMoney, multiplyMoney, percentOf, poisha, subtractMoney, taka, toTaka } from './money';
 
 describe('money', () => {
   it('stores taka as whole poisha', () => {
@@ -13,6 +13,19 @@ describe('money', () => {
     expect(() => taka(Number.NaN)).toThrow(RangeError);
     expect(() => taka(Number.POSITIVE_INFINITY)).toThrow(RangeError);
     expect(() => taka(10.005)).toThrow(RangeError); // finer than one poisha
+  });
+
+  it('accepts large two-decimal amounts exactly', () => {
+    expect(taka(131072.02)).toBe(13107202);
+    expect(taka(1234567.89)).toBe(123456789);
+    expect(taka(525965.55)).toBe(52596555);
+    expect(() => taka(2.675)).toThrow(RangeError); // still finer than one poisha
+  });
+
+  it('builds money from a stored poisha count', () => {
+    expect(poisha(13107202)).toBe(taka(131072.02));
+    expect(() => poisha(1.5)).toThrow(RangeError);
+    expect(() => poisha(-1)).toThrow(RangeError);
   });
 
   it('adds, subtracts and multiplies', () => {

@@ -8,6 +8,21 @@ export type { ReadinessCheck } from './health/routes';
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
+/** Fixed, safe answers for requests the framework rejected because of what the client sent. */
+const CLIENT_ERRORS: Record<number, { code: string; message: string }> = {
+  400: { code: 'bad_request', message: 'The request could not be read.' },
+  413: { code: 'payload_too_large', message: 'The request is too large.' },
+  415: { code: 'unsupported_media_type', message: 'This content type is not supported.' },
+};
+
+function clientErrorStatus(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const { statusCode, code, validation } = error as { statusCode?: unknown; code?: unknown; validation?: unknown };
+  const fromFramework = validation !== undefined || (typeof code === 'string' && code.startsWith('FST_'));
+  if (!fromFramework || typeof statusCode !== 'number' || statusCode < 400 || statusCode >= 500) return null;
+  return statusCode;
+}
+
 export async function buildApp(deps: { config: Config; checks: ReadinessCheck[] }): Promise<FastifyInstance> {
   const app = Fastify({
     logger: deps.config.nodeEnv === 'test' ? false : { level: deps.config.logLevel },
@@ -30,6 +45,12 @@ export async function buildApp(deps: { config: Config; checks: ReadinessCheck[] 
       return reply
         .code(error.statusCode)
         .send({ error: { code: error.code, message: error.message, requestId: request.id } });
+    }
+    const clientStatus = clientErrorStatus(error);
+    if (clientStatus !== null) {
+      request.log.info({ err: error }, 'client error');
+      const known = CLIENT_ERRORS[clientStatus] ?? CLIENT_ERRORS[400];
+      return reply.code(clientStatus).send({ error: { ...known, requestId: request.id } });
     }
     request.log.error({ err: error }, 'unhandled error');
     return reply

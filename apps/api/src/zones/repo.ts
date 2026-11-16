@@ -1,4 +1,4 @@
-import { type Money, taka } from '@oregano/domain';
+import { type Money, poisha } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 
@@ -48,8 +48,8 @@ export async function findZoneForPoint(db: Db, point: { lat: number; lng: number
     slug: row.slug,
     nameEn: row.name_en,
     nameBn: row.name_bn,
-    feePerKm: taka(row.fee_per_km_poisha / 100),
-    minFee: taka(row.min_fee_poisha / 100),
+    feePerKm: poisha(row.fee_per_km_poisha),
+    minFee: poisha(row.min_fee_poisha),
     roadFactor: Number(row.road_factor),
     timezone: row.timezone,
     isActive: row.is_active,

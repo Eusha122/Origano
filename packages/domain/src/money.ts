@@ -18,12 +18,18 @@ export function taka(amount: number): Money {
   if (!Number.isFinite(amount)) {
     throw new RangeError(`taka amount must be finite, got ${amount}`);
   }
-  const raw = amount * POISHA_PER_TAKA;
-  const poisha = Math.round(raw);
-  if (Math.abs(raw - poisha) > 1e-9) {
+  const poishaCount = Math.round(amount * POISHA_PER_TAKA);
+  // Compare in taka: dividing a whole poisha count by 100 lands on the same double as any two-decimal
+  // literal, at every size, so only amounts that really have a third decimal fail here.
+  if (poishaCount / POISHA_PER_TAKA !== amount) {
     throw new RangeError(`taka amount ${amount} is finer than one poisha`);
   }
-  return assertMoney(poisha, 'taka amount');
+  return assertMoney(poishaCount, 'taka amount');
+}
+
+/** Money from a whole poisha count, as stored in the database. */
+export function poisha(count: number): Money {
+  return assertMoney(count, 'poisha count');
 }
 
 export function toTaka(amount: Money): number {

@@ -39,4 +39,18 @@ describe('loadConfig', () => {
       expect(String((error as Error).message)).not.toContain('hunter2');
     }
   });
+
+  it('rejects a URL that has the right prefix but cannot be parsed', () => {
+    for (const bad of ['postgres://user:p@ss w0rd@host:abc/db', 'postgres://', 'redis://']) {
+      const key = bad.startsWith('redis') ? 'REDIS_URL' : 'DATABASE_URL';
+      try {
+        loadConfig({ ...valid, [key]: bad });
+        expect.unreachable(`${bad} should be rejected`);
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as ConfigError).problems.join(' ')).toContain(key);
+        expect((error as Error).message).not.toContain('w0rd');
+      }
+    }
+  });
 });

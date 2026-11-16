@@ -80,4 +80,37 @@ describe('api skeleton', () => {
     const bad = await app.inject({ method: 'GET', url: '/healthz', headers: { 'x-request-id': '<script>' } });
     expect(bad.headers['x-request-id']).not.toBe('<script>');
   });
+
+  it('answers client mistakes with a 4xx, not an internal error', async () => {
+    const app = await buildApp({ config, checks: [] });
+    app.post('/echo', async (request) => request.body);
+
+    const malformed = await app.inject({
+      method: 'POST',
+      url: '/echo',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"broken": ',
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json().error).toMatchObject({ code: 'bad_request' });
+
+    const wrongType = await app.inject({
+      method: 'POST',
+      url: '/echo',
+      headers: { 'content-type': 'application/x-unknown' },
+      payload: 'x',
+    });
+    expect(wrongType.statusCode).toBe(415);
+    expect(wrongType.json().error).toMatchObject({ code: 'unsupported_media_type' });
+
+    const tooLarge = await app.inject({
+      method: 'POST',
+      url: '/echo',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ text: 'x'.repeat(1_100_000) }),
+    });
+    expect(tooLarge.statusCode).toBe(413);
+    expect(tooLarge.json().error).toMatchObject({ code: 'payload_too_large' });
+    await app.close();
+  });
 });
