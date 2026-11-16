@@ -13,9 +13,9 @@ import { layout } from '@oregano/ui';
 import { Body, Button, Heading, Screen, TextField, useLocale } from '@oregano/ui-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useCart } from '../cart';
-import { errorKey, pick, quantityLine } from '../components';
+import { ErrorState, errorKey, pick, quantityLine } from '../components';
 import { TOWN_CENTRE } from '../config';
 
 export default function Checkout() {
@@ -46,8 +46,10 @@ export default function Checkout() {
     queryKey: queryKeys.restaurants,
     queryFn: () => api.restaurants(TOWN_CENTRE),
   });
-  const fee = restaurants.data?.restaurants.find((r) => r.id === cart.restaurant?.id)?.deliveryFee ?? 0;
-  const total = addMoney(cart.subtotal, poisha(fee));
+  // A total is shown and submitted only once the fee is known: never a guess, never Tk 0 by default.
+  const fee = restaurants.data?.restaurants.find((r) => r.id === cart.restaurant?.id)?.deliveryFee ?? null;
+  const outsideZone = restaurants.isSuccess && fee === null;
+  const total = fee === null ? null : addMoney(cart.subtotal, poisha(fee));
 
   const place = useMutation({
     mutationFn: () => {
@@ -84,6 +86,7 @@ export default function Checkout() {
 
   function onPlaceOrder() {
     setSubmitted(true);
+    if (total === null) return;
     if (address.trim() === '' || landmark.trim() === '' || phone.trim() === '') return;
     place.mutate();
   }
@@ -128,14 +131,21 @@ export default function Checkout() {
         <Body>{t(locale, 'checkout.subtotal')}</Body>
         <Body>{formatMoney(cart.subtotal, locale)}</Body>
       </View>
-      <View style={styles.row}>
-        <Body>{t(locale, 'checkout.deliveryFee')}</Body>
-        <Body>{formatMoney(poisha(fee), locale)}</Body>
-      </View>
-      <View style={styles.row}>
-        <Body strong>{t(locale, 'checkout.total')}</Body>
-        <Body strong>{formatMoney(total, locale)}</Body>
-      </View>
+      {restaurants.isError ? <ErrorState error={restaurants.error} onRetry={() => void restaurants.refetch()} /> : null}
+      {outsideZone ? <Body>{t(locale, 'zone.outside')}</Body> : null}
+      {restaurants.isPending ? <ActivityIndicator /> : null}
+      {fee !== null && total !== null ? (
+        <>
+          <View style={styles.row}>
+            <Body>{t(locale, 'checkout.deliveryFee')}</Body>
+            <Body>{formatMoney(poisha(fee), locale)}</Body>
+          </View>
+          <View style={styles.row}>
+            <Body strong>{t(locale, 'checkout.total')}</Body>
+            <Body strong>{formatMoney(total, locale)}</Body>
+          </View>
+        </>
+      ) : null}
       <Body muted>{t(locale, 'checkout.cash')}</Body>
       {place.isError ? (
         <View role="alert">
@@ -143,7 +153,12 @@ export default function Checkout() {
         </View>
       ) : null}
       <Button
-        label={t(locale, 'checkout.placeOrder', { total: formatMoney(total, locale) })}
+        label={
+          total === null
+            ? t(locale, 'action.placeOrder')
+            : t(locale, 'checkout.placeOrder', { total: formatMoney(total, locale) })
+        }
+        disabled={total === null}
         busy={place.isPending}
         onPress={onPlaceOrder}
       />
