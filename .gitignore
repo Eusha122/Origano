@@ -1,0 +1,10 @@
+node_modules
+dist
+.turbo
+.expo
+.env
+coverage
+test-results
+playwright-report
+.superpowers
+*.zip
