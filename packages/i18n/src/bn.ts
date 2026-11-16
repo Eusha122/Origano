@@ -74,4 +74,8 @@ export const bn: Record<MessageKey, string> = {
   'rider.delivered': 'পৌঁছে দিয়েছি',
   'rider.collectCash': '{amount} নিন',
   'rider.callCustomer': 'গ্রাহককে কল করুন',
+  'rider.title': 'ডেলিভারি',
+  'rider.ridersOnly': 'এই অ্যাপ শুধু অনুমোদিত ওরেগানো রাইডারদের জন্য।',
+  'rider.distance': '{km} কিমি দূরে',
+  'rider.deliverTo': 'পৌঁছে দিন',
 };

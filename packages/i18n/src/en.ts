@@ -73,6 +73,10 @@ export const en = {
   'rider.delivered': 'Delivered',
   'rider.collectCash': 'Collect {amount}',
   'rider.callCustomer': 'Call customer',
+  'rider.title': 'Deliveries',
+  'rider.ridersOnly': 'This app is for approved Oregano riders.',
+  'rider.distance': '{km} km away',
+  'rider.deliverTo': 'Deliver to',
 } as const;
 
 export type MessageKey = keyof typeof en;
