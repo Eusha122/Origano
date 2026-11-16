@@ -15,6 +15,19 @@ describe('i18n', () => {
     }
   });
 
+  it('every placeholder in English appears in Bangla, and the reverse', () => {
+    const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    for (const key of Object.keys(messages.en) as (keyof typeof messages.en)[]) {
+      expect(placeholders(messages.bn[key]), key).toEqual(placeholders(messages.en[key]));
+    }
+  });
+
+  it('has the Plan 02 strings with their placeholders', () => {
+    expect(t('en', 'cart.viewCart', { count: 2, total: 'Tk 560' })).toBe('2 items · Tk 560 — View cart');
+    expect(t('bn', 'order.number', { number: '১২' })).toBe('অর্ডার #১২');
+    expect(t('bn', 'rider.collectCash', { amount: '৳৯৬০' })).toBe('৳৯৬০ নিন');
+  });
+
   it('translates the brand promise exactly as the book writes it', () => {
     expect(t('en', 'brand.promise')).toBe("Your town's food, in one place.");
     expect(t('bn', 'brand.promise')).toBe('শহরের সব খাবার, এক ঠিকানায়।');
