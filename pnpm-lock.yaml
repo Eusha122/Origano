@@ -379,9 +379,6 @@ importers:
         specifier: 0.13.0
         version: 0.13.0(@babel/core@7.29.13(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(react-native@0.88.1(@babel/core@7.29.13(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)
     devDependencies:
-      '@playwright/test':
-        specifier: ^1.65.1
-        version: 1.65.1
       '@types/react':
         specifier: ~19.3.0
         version: 19.3.0
@@ -579,6 +576,21 @@ importers:
       '@types/react':
         specifier: ~19.3.0
         version: 19.3.0
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
+  e2e:
+    devDependencies:
+      '@oregano/api':
+        specifier: workspace:*
+        version: link:../apps/api
+      '@playwright/test':
+        specifier: ^1.65.1
+        version: 1.65.1
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
       typescript:
         specifier: ~6.0.3
         version: 6.0.3

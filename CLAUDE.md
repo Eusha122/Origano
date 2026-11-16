@@ -10,19 +10,33 @@ Prerequisites: Node 24, pnpm (via corepack), Docker.
 pnpm install          # install everything
 pnpm db:up            # start local PostgreSQL (PostGIS) and Redis in Docker
 pnpm db:migrate       # apply migrations to the local database
-pnpm db:seed          # seed the Chapainawabganj zone
+pnpm db:seed          # seed the Chapainawabganj zone and the demo restaurant and users
 pnpm verify           # the completion gate: lint, typecheck, tests, web build, browser tests
 pnpm format           # apply Biome formatting
 pnpm --filter @oregano/domain test   # one package's tests
+pnpm test:e2e         # browser tests only, including the first-order journey (needs pnpm db:up)
 ```
 
 API tests use a real database (`oregano_test`), created automatically by `infra/postgres-init` the first time `pnpm db:up` runs.
 
+Browser tests live in `e2e/` (Playwright). They start their own six servers, never reusing a running one: the API, the outbox worker and the four apps, against their own database `oregano_e2e_test`, which global setup migrates, empties (it refuses any database not named `*_test`) and seeds with the demo data. Sign-in codes come from the development-only `GET /v1/dev/otp/:phone` (`DEV_OTP_PEEK=true`).
+
+|                    | API  | Customer | Restaurant | Rider | Admin |
+| ------------------ | ---- | -------- | ---------- | ----- | ----- |
+| Dev ports          | 4000 | 8081     | 8082       | 8083  | 8084  |
+| Journey test ports | 4100 | 8191     | 8192       | 8193  | 8194  |
+
+Demo phones (from `pnpm db:seed`): customer 01711000001, Burger Lane owner 01711000002, rider 01711000003, admin 01711000004, second rider 01711000005.
+
 ## Layout
 
 ```
-apps/api/         Fastify backend: config, health checks, database, zones
+apps/api/         Fastify backend and the outbox worker (src/worker.ts)
 apps/customer/    Expo app (web, Android, iOS); screens in src/app/
+apps/restaurant/  Expo app for restaurant staff
+apps/rider/       Expo app for riders
+apps/admin/       Vite web dashboard for the Oregano team
+e2e/              Playwright browser tests across all four apps
 packages/domain/  Pure business rules: money, order state machine
 packages/i18n/    English and Bangla messages, money formatting
 packages/ui/      Brand tokens and contrast checks

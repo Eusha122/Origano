@@ -1,0 +1,16 @@
+{
+  "name": "@oregano/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@oregano/api": "workspace:*",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
+    "typescript": "~6.0.3"
+  }
+}

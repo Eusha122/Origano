@@ -42,9 +42,11 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Create the test database
-        run: PGPASSWORD=oregano psql -h localhost -U oregano -d oregano -c 'CREATE DATABASE oregano_test OWNER oregano;'
-      - run: pnpm --filter @oregano/customer exec playwright install --with-deps chromium
+      - name: Create the test databases
+        run: |
+          PGPASSWORD=oregano psql -h localhost -U oregano -d oregano -c 'CREATE DATABASE oregano_test OWNER oregano;'
+          PGPASSWORD=oregano psql -h localhost -U oregano -d oregano -c 'CREATE DATABASE oregano_e2e_test OWNER oregano;'
+      - run: pnpm --filter @oregano/e2e exec playwright install --with-deps chromium
       - run: pnpm db:migrate
       - run: pnpm verify
 
