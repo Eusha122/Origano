@@ -1,10 +1,18 @@
 import { randomUUID } from 'node:crypto';
+import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from './config';
+import type { Db } from './db/client';
 import { AppError } from './errors';
 import { healthRoutes, type ReadinessCheck } from './health/routes';
+import { registerAuth } from './identity/auth';
+import { devRoutes } from './identity/dev-routes';
+import type { OtpSender } from './identity/otp';
+import { identityRoutes } from './identity/routes';
 
 export type { ReadinessCheck } from './health/routes';
+
+export type Services = { db: Db; otpSender: OtpSender };
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -23,7 +31,11 @@ function clientErrorStatus(error: unknown): number | null {
   return statusCode;
 }
 
-export async function buildApp(deps: { config: Config; checks: ReadinessCheck[] }): Promise<FastifyInstance> {
+export async function buildApp(deps: {
+  config: Config;
+  checks: ReadinessCheck[];
+  services?: Services;
+}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: deps.config.nodeEnv === 'test' ? false : { level: deps.config.logLevel },
     genReqId: (request) => {
@@ -58,6 +70,24 @@ export async function buildApp(deps: { config: Config; checks: ReadinessCheck[] 
       .send({ error: { code: 'internal', message: 'Something went wrong.', requestId: request.id } });
   });
 
+  // Only the listed origins may call the API from a browser; an empty list allows none.
+  await app.register(cors, {
+    origin: deps.config.corsOrigins,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  });
+
   healthRoutes(app, deps.checks);
+
+  const { services, config } = deps;
+  if (services) {
+    registerAuth(app, services.db);
+    await app.register(
+      async (v1) => {
+        identityRoutes(v1, config, services);
+        if (config.devOtpPeek) devRoutes(v1, services.otpSender);
+      },
+      { prefix: '/v1' },
+    );
+  }
   return app;
 }

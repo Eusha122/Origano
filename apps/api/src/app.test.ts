@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildApp } from './app';
+import { afterEach, describe, expect, it } from 'vitest';
+import { buildApp as build } from './app';
 import { loadConfig } from './config';
 import { AppError } from './errors';
 
@@ -7,7 +7,18 @@ const config = loadConfig({
   NODE_ENV: 'test',
   DATABASE_URL: 'postgres://u:p@localhost/x',
   REDIS_URL: 'redis://localhost',
+  OTP_SECRET: 'x'.repeat(40),
 });
+const apps: Awaited<ReturnType<typeof build>>[] = [];
+async function buildApp(deps: Parameters<typeof build>[0]) {
+  const app = await build(deps);
+  apps.push(app);
+  return app;
+}
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+
 const pass = { name: 'postgres', check: async () => {} };
 const fail = {
   name: 'redis',
@@ -111,6 +122,5 @@ describe('api skeleton', () => {
     });
     expect(tooLarge.statusCode).toBe(413);
     expect(tooLarge.json().error).toMatchObject({ code: 'payload_too_large' });
-    await app.close();
   });
 });
