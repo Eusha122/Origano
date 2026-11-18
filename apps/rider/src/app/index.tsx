@@ -22,6 +22,7 @@ export default function Index() {
       </Screen>
     );
   }
-  if (!session.me.rider) return <RidersOnly />;
+  // Applicants have a rider record too; only an approved rider gets the delivery screen (joining screens: Task 18).
+  if (session.me.rider?.status !== 'approved') return <RidersOnly />;
   return <RiderScreen isOnline={session.me.rider.isOnline} />;
 }

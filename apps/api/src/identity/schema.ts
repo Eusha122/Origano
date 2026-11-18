@@ -12,6 +12,8 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { restaurants } from '../catalog/schema';
+import { agencies } from '../onboarding/schema';
 import { zones } from '../zones/schema';
 
 export const users = pgTable('users', {
@@ -128,9 +130,33 @@ export const riders = pgTable(
     type: text('type').notNull(),
     status: text('status').notNull(),
     isOnline: boolean('is_online').notNull().default(false),
+    vehicleType: text('vehicle_type'),
+    vehicleRegistration: text('vehicle_registration'),
+    guarantorName: text('guarantor_name'),
+    guarantorPhone: text('guarantor_phone'),
+    guarantorRelation: text('guarantor_relation'),
+    /** Set exactly when type is agency. */
+    agencyId: uuid('agency_id').references(() => agencies.id),
+    /** Set exactly when type is restaurant_staff. */
+    restaurantId: uuid('restaurant_id').references(() => restaurants.id),
+    rejectionReason: text('rejection_reason'),
+    suspendedReason: text('suspended_reason'),
+    reviewedBy: uuid('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check('riders_agency_matches_type', sql`(${table.type} = 'agency') = (${table.agencyId} IS NOT NULL)`),
+    check(
+      'riders_restaurant_matches_type',
+      sql`(${table.type} = 'restaurant_staff') = (${table.restaurantId} IS NOT NULL)`,
+    ),
+    check(
+      'riders_vehicle_type_valid',
+      sql`${table.vehicleType} IS NULL OR ${table.vehicleType} IN ('bicycle', 'motorcycle', 'electric_bike', 'on_foot')`,
+    ),
     check('riders_type_valid', sql`${table.type} IN ('agency', 'independent', 'restaurant_staff')`),
     check(
       'riders_status_valid',

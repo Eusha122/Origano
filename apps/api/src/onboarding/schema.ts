@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { restaurants } from '../catalog/schema';
 import { users } from '../identity/schema';
 
 /**
@@ -47,4 +48,33 @@ export const restaurantApplications = pgTable(
     ),
     check('restaurant_applications_payout_method_valid', sql`${table.payoutMethod} IN ('bkash', 'nagad', 'bank')`),
   ],
+);
+
+/** A delivery agency whose riders join with its code. */
+export const agencies = pgTable(
+  'agencies',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    contactPhone: text('contact_phone').notNull(),
+    /** 8 characters, random, unique. */
+    code: text('code').notNull().unique(),
+    status: text('status').notNull().default('approved'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check('agencies_status_valid', sql`${table.status} IN ('approved', 'suspended')`)],
+);
+
+/** A restaurant owner's invitation for a phone to join as that restaurant's own rider. */
+export const riderInvites = pgTable(
+  'rider_invites',
+  {
+    restaurantId: uuid('restaurant_id')
+      .notNull()
+      .references(() => restaurants.id, { onDelete: 'cascade' }),
+    phone: text('phone').notNull(),
+    invitedBy: uuid('invited_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.restaurantId, table.phone] })],
 );

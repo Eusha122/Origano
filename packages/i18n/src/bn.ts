@@ -106,6 +106,8 @@ export const bn: Record<MessageKey, string> = {
   'error.applicationNotEditable': 'আবেদনটি এখন Oregano টিমের কাছে আছে, তাই বদলানো যাবে না।',
   'error.applicationIncomplete': 'কিছু তথ্য বা নথি বাকি আছে। যোগ করে আবার পাঠান।',
   'error.applicationExists': 'আপনার একটি আবেদন আগে থেকেই চলছে।',
+  'error.agencyCodeInvalid': 'এজেন্সি কোডটি পাওয়া যায়নি। আপনার এজেন্সির কাছ থেকে দেখে নিন।',
+  'error.riderInviteMissing': 'রেস্টুরেন্টটি এই ফোন নম্বরকে এখনও যুক্ত করেনি। মালিককে আপনাকে যোগ করতে বলুন।',
   'error.unsupportedDocument': 'ফাইলটি পড়া যায়নি। JPEG, PNG বা WebP ফরম্যাটের একটি পরিষ্কার ছবি দিন।',
   'error.documentTooLarge': 'ফাইলটি অনেক বড়। 8 MB এর কম আকারের ছবি দিন।',
   'error.documentDeleted': 'এই নথিটি মুছে ফেলা হয়েছে।',

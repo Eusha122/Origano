@@ -48,10 +48,11 @@ async function upsertUser(db: Db, local: string, name: string | null, team?: Tea
 
 async function upsertRider(db: Db, userId: string, zoneId: string): Promise<void> {
   await db.execute(sql`
-    INSERT INTO riders (user_id, zone_id, type, status, is_online)
-    VALUES (${userId}, ${zoneId}, 'independent', 'approved', false)
+    INSERT INTO riders (user_id, zone_id, type, status, is_online, vehicle_type)
+    VALUES (${userId}, ${zoneId}, 'independent', 'approved', false, 'motorcycle')
     ON CONFLICT (user_id) DO UPDATE SET zone_id = EXCLUDED.zone_id, type = EXCLUDED.type,
-      status = EXCLUDED.status, is_online = EXCLUDED.is_online`);
+      status = EXCLUDED.status, is_online = EXCLUDED.is_online, vehicle_type = EXCLUDED.vehicle_type,
+      last_activity_at = now()`);
 }
 
 async function upsertCategory(

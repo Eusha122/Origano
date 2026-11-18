@@ -33,7 +33,7 @@ const event = (over: Partial<OrderChangedPayload> = {}): OrderChangedPayload => 
   ...over,
 });
 const rider = (id: string, zoneId: string, status = 'approved'): AuthUser =>
-  user({ id, rider: { zoneId, status, isOnline: true } });
+  user({ id, rider: { zoneId, status, isOnline: true, type: 'independent', agencyActive: true, restaurantId: null } });
 
 describe('audienceIncludes', () => {
   const cases: [string, AuthUser, OrderChangedPayload, boolean][] = [

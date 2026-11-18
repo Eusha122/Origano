@@ -1,4 +1,9 @@
-import { DocumentKindSchema, RestaurantApplicationBody, SubmitRestaurantApplicationBody } from '@oregano/contracts';
+import {
+  DocumentKindSchema,
+  RestaurantApplicationBody,
+  RiderApplicationBody,
+  SubmitRestaurantApplicationBody,
+} from '@oregano/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { Services } from '../app';
 import type { Config } from '../config';
@@ -14,6 +19,15 @@ import {
   submitMyApplication,
   touchApplication,
 } from './restaurant-applications';
+import {
+  editableRiderId,
+  getMyRiderApplication,
+  RIDER_DOCUMENT_KINDS,
+  riderSubject,
+  saveMyRiderApplication,
+  submitMyRiderApplication,
+  touchRider,
+} from './rider-applications';
 
 const invalid = () => new AppError('validation_failed', 400, 'Some details are missing or wrong.');
 
@@ -65,5 +79,40 @@ export function onboardingRoutes(app: FastifyInstance, config: Config, { db, sto
     const parsed = SubmitRestaurantApplicationBody.safeParse(request.body);
     if (!parsed.success) throw invalid();
     return submitMyApplication(db, user.id, parsed.data.noTradeLicence);
+  });
+
+  const riderBase = '/onboarding/rider';
+
+  app.get(riderBase, async (request) => {
+    const user = requireUser(request);
+    const view = await getMyRiderApplication(db, user.id);
+    if (!view) throw new AppError('not_found', 404, 'Not found.');
+    return view;
+  });
+
+  app.put(riderBase, async (request) => {
+    const user = requireUser(request);
+    const parsed = RiderApplicationBody.safeParse(request.body);
+    if (!parsed.success) throw invalid();
+    return saveMyRiderApplication(db, user.id, user.phone, parsed.data);
+  });
+
+  app.post<{ Params: { kind: string } }>(`${riderBase}/documents/:kind`, async (request, reply) => {
+    const user = requireUser(request);
+    const kind = DocumentKindSchema.safeParse(request.params.kind);
+    if (!kind.success || !(RIDER_DOCUMENT_KINDS as readonly string[]).includes(kind.data)) throw invalid();
+    const riderId = await editableRiderId(db, user.id);
+    const file = await request.file();
+    if (!file) throw invalid();
+    const bytes = await file.toBuffer();
+    const stored = await storeDocument({ db, store, keys }, riderSubject(riderId), kind.data, bytes, user.id);
+    await touchRider(db, riderId);
+    reply.code(201);
+    return { id: stored.id, kind: stored.kind, uploadedAt: stored.uploadedAt, outcome: stored.outcome };
+  });
+
+  app.post(`${riderBase}/submit`, async (request) => {
+    const user = requireUser(request);
+    return submitMyRiderApplication(db, user.id);
   });
 }

@@ -78,6 +78,13 @@
       "when": 1795002994983,
       "tag": "0010_long_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795003731350,
+      "tag": "0011_lyrical_thanos",
+      "breakpoints": true
     }
   ]
 }

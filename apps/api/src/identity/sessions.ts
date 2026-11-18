@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { BdPhone, TeamRole } from '@oregano/domain';
+import type { BdPhone, RiderType, TeamRole } from '@oregano/domain';
 import { type SQL, sql } from 'drizzle-orm';
 import { writeAudit } from '../admin/audit';
 import type { SessionLimits } from '../config';
@@ -12,7 +12,15 @@ export type AuthUser = {
   name: string | null;
   teamRoles: TeamRole[];
   restaurantIds: string[];
-  rider: { zoneId: string; status: string; isOnline: boolean } | null;
+  rider: {
+    zoneId: string;
+    status: string;
+    isOnline: boolean;
+    type: RiderType;
+    /** False when the rider belongs to an agency that is suspended. */
+    agencyActive: boolean;
+    restaurantId: string | null;
+  } | null;
 };
 
 export type RevokeReason = 'logout' | 'reuse_detected' | 'team_change' | 'operator';
@@ -210,6 +218,9 @@ type UserRow = {
   rider_zone_id: string | null;
   rider_status: string | null;
   rider_is_online: boolean | null;
+  rider_type: RiderType | null;
+  rider_agency_active: boolean | null;
+  rider_restaurant_id: string | null;
 };
 
 async function loadUser(db: Pick<Db, 'execute'>, where: SQL): Promise<AuthUser | null> {
@@ -218,9 +229,12 @@ async function loadUser(db: Pick<Db, 'execute'>, where: SQL): Promise<AuthUser |
       COALESCE((SELECT array_agg(tm.role ORDER BY tm.role) FROM team_members tm WHERE tm.user_id = u.id), '{}') AS team_roles,
       COALESCE((SELECT array_agg(rs.restaurant_id::text ORDER BY rs.restaurant_id)
                 FROM restaurant_staff rs WHERE rs.user_id = u.id), '{}') AS restaurant_ids,
-      r.zone_id AS rider_zone_id, r.status AS rider_status, r.is_online AS rider_is_online
+      r.zone_id AS rider_zone_id, r.status AS rider_status, r.is_online AS rider_is_online,
+      r.type AS rider_type, (a.id IS NULL OR a.status = 'approved') AS rider_agency_active,
+      r.restaurant_id AS rider_restaurant_id
     FROM users u
     LEFT JOIN riders r ON r.user_id = u.id
+    LEFT JOIN agencies a ON a.id = r.agency_id
     WHERE ${where}`);
   const row = rows[0];
   if (!row) return null;
@@ -233,7 +247,14 @@ async function loadUser(db: Pick<Db, 'execute'>, where: SQL): Promise<AuthUser |
     rider:
       row.rider_zone_id === null
         ? null
-        : { zoneId: row.rider_zone_id, status: row.rider_status ?? '', isOnline: row.rider_is_online ?? false },
+        : {
+            zoneId: row.rider_zone_id,
+            status: row.rider_status ?? '',
+            isOnline: row.rider_is_online ?? false,
+            type: row.rider_type ?? 'independent',
+            agencyActive: row.rider_agency_active ?? true,
+            restaurantId: row.rider_restaurant_id,
+          },
   };
 }
 

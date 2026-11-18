@@ -1,5 +1,5 @@
 import type { Me, Role } from '@oregano/contracts';
-import { type Permission, teamCan } from '@oregano/domain';
+import { type AccountStatus, type Permission, teamCan } from '@oregano/domain';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Db } from '../db/client';
 import { AppError } from '../errors';
@@ -45,7 +45,10 @@ export function requireUser(request: FastifyRequest): AuthUser {
 
 export function requireRole(request: FastifyRequest, role: 'restaurant' | 'rider'): AuthUser {
   const user = requireUser(request);
-  const allowed = role === 'restaurant' ? user.restaurantIds.length > 0 : user.rider?.status === 'approved';
+  const allowed =
+    role === 'restaurant'
+      ? user.restaurantIds.length > 0
+      : user.rider?.status === 'approved' && user.rider.agencyActive;
   if (!allowed) throw new AppError('forbidden', 403, 'You cannot do that.');
   return user;
 }
@@ -60,7 +63,7 @@ export function requirePermission(request: FastifyRequest, permission: Permissio
 export function toMe(user: AuthUser): Me {
   const roles: Role[] = ['customer'];
   if (user.restaurantIds.length > 0) roles.push('restaurant');
-  if (user.rider) roles.push('rider');
+  if (user.rider?.status === 'approved') roles.push('rider');
   if (user.teamRoles.length > 0) roles.push('admin');
   return {
     id: user.id,
@@ -69,6 +72,13 @@ export function toMe(user: AuthUser): Me {
     roles,
     teamRoles: user.teamRoles,
     restaurantIds: user.restaurantIds,
-    rider: user.rider ? { zoneId: user.rider.zoneId, isOnline: user.rider.isOnline } : null,
+    rider: user.rider
+      ? {
+          zoneId: user.rider.zoneId,
+          isOnline: user.rider.isOnline,
+          status: user.rider.status as AccountStatus,
+          type: user.rider.type,
+        }
+      : null,
   };
 }

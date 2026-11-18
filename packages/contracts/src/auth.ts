@@ -1,4 +1,4 @@
-import { TEAM_ROLES } from '@oregano/domain';
+import { ACCOUNT_STATUSES, RIDER_TYPES, TEAM_ROLES } from '@oregano/domain';
 import { z } from 'zod';
 
 export const OtpRequestBody = z.object({
@@ -30,7 +30,14 @@ export const Me = z.object({
   roles: z.array(Role),
   teamRoles: z.array(z.enum(TEAM_ROLES)),
   restaurantIds: z.array(z.uuid()),
-  rider: z.object({ zoneId: z.uuid(), isOnline: z.boolean() }).nullable(),
+  rider: z
+    .object({
+      zoneId: z.uuid(),
+      isOnline: z.boolean(),
+      status: z.enum(ACCOUNT_STATUSES),
+      type: z.enum(RIDER_TYPES),
+    })
+    .nullable(),
 });
 export type Me = z.infer<typeof Me>;
 

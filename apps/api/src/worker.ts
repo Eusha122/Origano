@@ -6,11 +6,14 @@ import { type DocumentSubject, pruneDocuments } from './media/vault';
 import { createProviders } from './notifications/sms/providers';
 import { startSmsDispatcher } from './notifications/sms/queue';
 import { restaurantApplicationAbandoned } from './onboarding/restaurant-applications';
+import { riderApplicationAbandoned } from './onboarding/rider-applications';
 import { defaultSweepJobs, startSweeper } from './worker/sweeper';
 
-/** Each kind of subject says for itself when its files are no longer wanted. Rider applications join in Task 13. */
+/** Each kind of subject says for itself when its files are no longer wanted. */
 async function isAbandoned(db: Db, subject: DocumentSubject): Promise<boolean> {
-  return subject.type === 'restaurant_application' ? restaurantApplicationAbandoned(db, subject.id) : false;
+  return subject.type === 'restaurant_application'
+    ? restaurantApplicationAbandoned(db, subject.id)
+    : riderApplicationAbandoned(db, subject.id);
 }
 
 async function main(): Promise<void> {

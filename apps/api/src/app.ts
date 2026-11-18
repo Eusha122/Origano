@@ -25,6 +25,7 @@ import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
 import { hashIp, subkey } from './security/crypto';
 import { registerRateLimits } from './security/rate-limit';
+import { zoneRoutes } from './zones/routes';
 
 export type { ReadinessCheck } from './health/routes';
 
@@ -148,6 +149,7 @@ export async function buildApp(deps: {
         dispatchRoutes(v1, services);
         adminRoutes(v1, services);
         onboardingRoutes(v1, config, services);
+        zoneRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services);
       },
       { prefix: '/v1' },

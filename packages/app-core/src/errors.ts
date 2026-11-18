@@ -38,6 +38,8 @@ const KEYS: Record<ErrorCode, MessageKey> = {
   application_not_editable: 'error.applicationNotEditable',
   application_incomplete: 'error.applicationIncomplete',
   application_exists: 'error.applicationExists',
+  agency_code_invalid: 'error.agencyCodeInvalid',
+  rider_invite_missing: 'error.riderInviteMissing',
   unsupported_document: 'error.unsupportedDocument',
   document_too_large: 'error.documentTooLarge',
   document_deleted: 'error.documentDeleted',
