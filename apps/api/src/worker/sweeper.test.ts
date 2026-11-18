@@ -78,7 +78,13 @@ describe('retention sweeper', () => {
     const ran: string[] = [];
     const jobs: SweepJob[] = [
       { name: 'broken', run: async () => Promise.reject(new Error('nope')) },
-      { name: 'fine', run: async () => (ran.push('fine'), 3) },
+      {
+        name: 'fine',
+        run: async () => {
+          ran.push('fine');
+          return 3;
+        },
+      },
     ];
     expect(await runSweepOnce(db, jobs, NOW)).toEqual({ broken: 0, fine: 3 });
     expect(ran).toEqual(['fine']);
