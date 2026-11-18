@@ -29,6 +29,7 @@
     "@fastify/websocket": "^11.3.7",
     "@oregano/contracts": "workspace:*",
     "@oregano/domain": "workspace:*",
+    "@oregano/i18n": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.12.8",
     "ioredis": "^6.0.0",

@@ -20,7 +20,7 @@ describe('typed API client against the real API', () => {
     const client = clientWith(() => token);
     const requested = await client.requestOtp(CUSTOMER);
     expect(requested.expiresInSeconds).toBeGreaterThan(0);
-    const code = t.otp.last('+8801711000001');
+    const code = await t.otp.last('+8801711000001');
     if (!code) throw new Error('no OTP was sent');
     const session = await client.verifyOtp(CUSTOMER, code);
     token = session.token;

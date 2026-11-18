@@ -21,7 +21,7 @@ describe('sign-in by OTP', () => {
     expect(requested.statusCode).toBe(202);
     expect(requested.json()).toEqual({ expiresInSeconds: 300, resendInSeconds: 60 });
 
-    const code = t.otp.last('+8801711000099');
+    const code = await t.otp.last('+8801711000099');
     expect(code).toMatch(/^[0-9]{6}$/);
     const verified = await post(t, '/v1/auth/otp/verify', { phone: '01711000099', code });
     expect(verified.statusCode).toBe(200);
@@ -57,7 +57,7 @@ describe('sign-in by OTP', () => {
 
   it('rejects a wrong code, then locks the code after five wrong tries', async () => {
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
-    const code = t.otp.last('+8801711000001') as string;
+    const code = (await t.otp.last('+8801711000001')) as string;
     const wrong = code === '000000' ? '111111' : '000000';
     for (let i = 0; i < 4; i++) {
       const res = await post(t, '/v1/auth/otp/verify', { phone: '01711000001', code: wrong });
@@ -74,7 +74,7 @@ describe('sign-in by OTP', () => {
 
   it('rejects an expired code', async () => {
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
-    const code = t.otp.last('+8801711000001');
+    const code = await t.otp.last('+8801711000001');
     await t.db.execute(sql`UPDATE otp_challenges SET expires_at = now() - interval '1 second'`);
     const res = await post(t, '/v1/auth/otp/verify', { phone: '01711000001', code });
     expect(res.statusCode).toBe(401);
@@ -83,16 +83,16 @@ describe('sign-in by OTP', () => {
 
   it('a code works once', async () => {
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
-    const code = t.otp.last('+8801711000001');
+    const code = await t.otp.last('+8801711000001');
     expect((await post(t, '/v1/auth/otp/verify', { phone: '01711000001', code })).statusCode).toBe(200);
     expect((await post(t, '/v1/auth/otp/verify', { phone: '01711000001', code })).statusCode).toBe(401);
   });
 
   it('a new request replaces the earlier code', async () => {
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
-    const first = t.otp.last('+8801711000001') as string;
+    const first = (await t.otp.last('+8801711000001')) as string;
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
-    const second = t.otp.last('+8801711000001') as string;
+    const second = (await t.otp.last('+8801711000001')) as string;
     const rows = await t.db.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM otp_challenges`);
     expect(rows[0]?.n).toBe(1);
     if (first !== second) {
@@ -103,7 +103,7 @@ describe('sign-in by OTP', () => {
 
   it('stores neither codes nor tokens in plain text', async () => {
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
-    const code = t.otp.last('+8801711000001') as string;
+    const code = (await t.otp.last('+8801711000001')) as string;
     const verified = await post(t, '/v1/auth/otp/verify', { phone: '01711000001', code });
     const token = verified.json().token as string;
     const codes = await t.db.execute<{ code_hash: string }>(sql`SELECT code_hash FROM otp_challenges`);
@@ -120,7 +120,8 @@ describe('sign-in by OTP', () => {
       expect(res.statusCode).toBe(400);
       expect(res.json().error.code).toBe('invalid_phone');
     }
-    expect(t.otp.sent).toHaveLength(0);
+    const queued = await t.db.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM sms_messages`);
+    expect(queued[0]?.n).toBe(0);
     const verify = await post(t, '/v1/auth/otp/verify', { phone: '12345', code: '123456' });
     expect(verify.json().error.code).toBe('invalid_phone');
   });
@@ -172,6 +173,6 @@ describe('dev OTP peek enabled', () => {
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
     const res = await t.app().inject({ method: 'GET', url: '/v1/dev/otp/+8801711000001' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ code: t.otp.last('+8801711000001') });
+    expect(res.json()).toEqual({ code: await t.otp.last('+8801711000001') });
   });
 });

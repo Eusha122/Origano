@@ -7,7 +7,7 @@ import { type Limits, loadConfig } from '../config';
 import type { Db } from '../db/client';
 import { type DemoIds, seedDemo } from '../dev/seed-demo';
 import { RealtimeHub } from '../events/realtime';
-import { CapturingOtpSender } from '../identity/otp';
+import { peekLatestOtpText } from '../notifications/sms/queue';
 import { withTestDb } from './db';
 import { TEST_DATA_KEYS } from './keys';
 
@@ -24,13 +24,13 @@ export function withTestApp(
 ): {
   app: () => FastifyInstance;
   db: Db;
-  otp: CapturingOtpSender;
+  /** The sign-in code in the newest queued SMS for a phone. */
+  otp: { last(phone: string): Promise<string | undefined> };
   demo: () => DemoIds;
   signIn: (phone: string) => Promise<string>;
   as: (token: string) => { authorization: string };
 } {
   const { db } = withTestDb();
-  const otp = new CapturingOtpSender();
   const base = loadConfig({
     NODE_ENV: 'test',
     DATABASE_URL: 'postgres://u:p@localhost/x',
@@ -45,10 +45,21 @@ export function withTestApp(
   const config = { ...base, limits: { ...base.limits, ...options.limits } };
   let instance: FastifyInstance | undefined;
   let ids: DemoIds | undefined;
+  const otp = {
+    last: async (phone: string): Promise<string | undefined> => {
+      const normalised = normalizeBdPhone(phone);
+      const text = normalised ? await peekLatestOtpText(db, config.dataKeys, normalised) : null;
+      return text?.match(/\b[0-9]{6}\b/)?.[0];
+    },
+  };
   const hub = options.realtime ? new RealtimeHub(config.redisUrl) : undefined;
 
   beforeAll(async () => {
-    instance = await buildApp({ config, checks: [], services: { db, otpSender: otp, realtime: hub } });
+    instance = await buildApp({
+      config,
+      checks: [],
+      services: { db, sms: { keys: config.dataKeys, retainUntilExpiry: true }, realtime: hub },
+    });
     if (hub) {
       await hub.start();
       await instance.listen({ port: 0, host: '127.0.0.1' });
@@ -56,7 +67,6 @@ export function withTestApp(
   });
 
   beforeEach(async () => {
-    otp.clear();
     ids = await seedDemo(db);
   });
 
@@ -83,7 +93,7 @@ export function withTestApp(
       if (!normalised) throw new Error(`Not a valid phone: ${phone}`);
       const requested = await app().inject({ method: 'POST', url: '/v1/auth/otp/request', payload: { phone } });
       if (requested.statusCode !== 202) throw new Error(`OTP request failed: ${requested.body}`);
-      const code = otp.last(normalised);
+      const code = await otp.last(normalised);
       const verified = await app().inject({ method: 'POST', url: '/v1/auth/otp/verify', payload: { phone, code } });
       if (verified.statusCode !== 200) throw new Error(`OTP verify failed: ${verified.body}`);
       return (verified.json() as { token: string }).token;

@@ -12,15 +12,15 @@ import type { RealtimeHub } from './events/realtime';
 import { healthRoutes, type ReadinessCheck } from './health/routes';
 import { registerAuth } from './identity/auth';
 import { devRoutes } from './identity/dev-routes';
-import type { OtpSender } from './identity/otp';
 import { identityRoutes } from './identity/routes';
 import { findUserByToken } from './identity/sessions';
+import type { SmsDeps } from './notifications/sms/queue';
 import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
 
 export type { ReadinessCheck } from './health/routes';
 
-export type Services = { db: Db; otpSender: OtpSender; realtime?: RealtimeHub };
+export type Services = { db: Db; sms: SmsDeps; realtime?: RealtimeHub };
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -122,7 +122,7 @@ export async function buildApp(deps: {
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);
         adminRoutes(v1, services);
-        if (config.devOtpPeek) devRoutes(v1, services.otpSender);
+        if (config.devOtpPeek) devRoutes(v1, services);
       },
       { prefix: '/v1' },
     );

@@ -1,53 +1,14 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import type { BdPhone } from '@oregano/domain';
+import { type Locale, t } from '@oregano/i18n';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { AppError } from '../errors';
+import { enqueueSms, type SmsDeps } from '../notifications/sms/queue';
 
 export const OTP_TTL_SECONDS = 300;
 export const OTP_RESEND_SECONDS = 60;
 export const OTP_MAX_ATTEMPTS = 5;
-
-export interface OtpSender {
-  send(phone: BdPhone, code: string): Promise<void>;
-}
-
-/** Development sender: writes the code to the log. Never use it where logs are shared. */
-export class LoggingOtpSender implements OtpSender {
-  private readonly remembered = new Map<string, string>();
-
-  constructor(
-    private readonly log: { info(message: string): void },
-    private readonly remember = false,
-  ) {}
-
-  async send(phone: BdPhone, code: string): Promise<void> {
-    if (this.remember) this.remembered.set(phone, code);
-    this.log.info(`OTP for ${phone} is ${code}`);
-  }
-
-  /** Only answers when built with `remember`, which exists for the dev peek route. */
-  last(phone: string): string | undefined {
-    return this.remembered.get(phone);
-  }
-}
-
-/** Test sender: keeps every code in memory. */
-export class CapturingOtpSender implements OtpSender {
-  readonly sent: { phone: string; code: string }[] = [];
-
-  async send(phone: BdPhone, code: string): Promise<void> {
-    this.sent.push({ phone, code });
-  }
-
-  last(phone: string): string | undefined {
-    return this.sent.findLast((entry) => entry.phone === phone)?.code;
-  }
-
-  clear(): void {
-    this.sent.length = 0;
-  }
-}
 
 export function generateCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
@@ -58,17 +19,36 @@ export function hashCode(secret: string, phone: string, code: string): Buffer {
   return createHmac('sha256', secret).update(`${phone}:${code}`).digest();
 }
 
-/** Starts a challenge. Any earlier challenge for the phone is replaced. */
-export async function requestOtp(db: Db, secret: string, sender: OtpSender, phone: BdPhone): Promise<void> {
+/** The SMS text. With a web OTP domain, a last line lets Chrome on Android fill the code in. */
+export function otpText(locale: Locale, code: string, webOtpDomain: string | null): string {
+  const text = t(locale, 'sms.otp', { code });
+  return webOtpDomain ? `${text}\n\n@${webOtpDomain} #${code}` : text;
+}
+
+/**
+ * Starts a challenge. Any earlier challenge for the phone is replaced. The SMS is queued in the same
+ * transaction, so a code exists exactly when its message is on its way.
+ */
+export async function requestOtp(
+  db: Db,
+  deps: { secret: string; sms: SmsDeps; webOtpDomain: string | null },
+  phone: BdPhone,
+  locale: Locale = 'en',
+): Promise<void> {
   const code = generateCode();
-  const codeHash = hashCode(secret, phone, code).toString('hex');
+  const codeHash = hashCode(deps.secret, phone, code).toString('hex');
   await db.transaction(async (tx) => {
     await tx.execute(sql`DELETE FROM otp_challenges WHERE phone = ${phone}`);
     await tx.execute(sql`
       INSERT INTO otp_challenges (phone, code_hash, expires_at)
       VALUES (${phone}, ${codeHash}, now() + make_interval(secs => ${OTP_TTL_SECONDS}))`);
+    await enqueueSms(tx, deps.sms, {
+      purpose: 'otp',
+      phone,
+      text: otpText(locale, code, deps.webOtpDomain),
+      expiresAt: new Date(Date.now() + OTP_TTL_SECONDS * 1000),
+    });
   });
-  await sender.send(phone, code);
 }
 
 type Challenge = { id: string; code_hash: string; attempts: number; consumed: boolean; expired: boolean };

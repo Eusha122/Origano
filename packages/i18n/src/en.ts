@@ -94,6 +94,7 @@ export const en = {
   'riderStatus.cancelled': 'Order cancelled',
   'riderStatus.expired': 'Order expired',
   'riderStatus.undeliverable': 'Could not be delivered',
+  'sms.otp': 'Your Oregano code is {code}. It expires in 5 minutes. Never share it.',
 } as const;
 
 export type MessageKey = keyof typeof en;

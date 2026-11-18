@@ -22,12 +22,12 @@ function requirePhone(input: string) {
   return phone;
 }
 
-export function identityRoutes(app: FastifyInstance, config: Config, { db, otpSender }: Services): void {
+export function identityRoutes(app: FastifyInstance, config: Config, { db, sms }: Services): void {
   // 202: the code is on its way by SMS; it has not arrived yet.
   app.post('/auth/otp/request', async (request, reply): Promise<OtpRequestResponse> => {
     const body = parseBody(OtpRequestBody, request.body);
     const phone = requirePhone(body.phone);
-    await requestOtp(db, config.otpSecret, otpSender, phone);
+    await requestOtp(db, { secret: config.otpSecret, sms, webOtpDomain: config.webOtpDomain }, phone);
     reply.code(202);
     return { expiresInSeconds: OTP_TTL_SECONDS, resendInSeconds: OTP_RESEND_SECONDS };
   });

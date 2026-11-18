@@ -97,4 +97,5 @@ export const bn: Record<MessageKey, string> = {
   'riderStatus.cancelled': 'অর্ডার বাতিল হয়েছে',
   'riderStatus.expired': 'অর্ডারের সময় শেষ',
   'riderStatus.undeliverable': 'পৌঁছে দেওয়া যায়নি',
+  'sms.otp': 'আপনার Oregano কোড {code}। 5 মিনিটে মেয়াদ শেষ হবে। কাউকে জানাবেন না।',
 };
