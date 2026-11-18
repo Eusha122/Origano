@@ -1,6 +1,7 @@
 import { createDb } from '../db/client';
-import { seedDemo } from './seed-demo';
+import { seedZones } from '../zones/seed';
 
+// Zones only: safe on any database. Demo users and the demo restaurant come from `pnpm db:seed:demo`.
 const url = process.env.DATABASE_URL;
 if (!url) {
   console.error('DATABASE_URL is required');
@@ -8,8 +9,8 @@ if (!url) {
 }
 const { db, close } = createDb(url);
 try {
-  await seedDemo(db);
-  console.log('demo data seeded');
+  await seedZones(db);
+  console.log('zones seeded');
 } finally {
   await close();
 }

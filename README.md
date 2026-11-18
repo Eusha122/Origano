@@ -10,7 +10,7 @@ You need Node 24 and Docker.
 corepack enable
 pnpm install
 pnpm db:up
-pnpm db:migrate && pnpm db:seed
+pnpm db:migrate && pnpm db:seed && pnpm db:seed:demo
 pnpm verify
 ```
 

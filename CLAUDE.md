@@ -10,7 +10,8 @@ Prerequisites: Node 24, pnpm (via corepack), Docker.
 pnpm install          # install everything
 pnpm db:up            # start local PostgreSQL (PostGIS) and Redis in Docker
 pnpm db:migrate       # apply migrations to the local database
-pnpm db:seed          # seed the Chapainawabganj zone and the demo restaurant and users
+pnpm db:seed          # seed the Chapainawabganj zone (safe on any database)
+pnpm db:seed:demo     # add the demo restaurant and users (only on `oregano` or a `*_test` database, never in production)
 pnpm verify           # the completion gate: lint, typecheck, tests, web build, browser tests
 pnpm format           # apply Biome formatting
 pnpm --filter @oregano/domain test   # one package's tests
@@ -26,7 +27,7 @@ Browser tests live in `e2e/` (Playwright). They start their own six servers, nev
 | Dev ports          | 4000 | 8081     | 8082       | 8083  | 8084  |
 | Journey test ports | 4100 | 8191     | 8192       | 8193  | 8194  |
 
-Demo phones (from `pnpm db:seed`): customer 01711000001, Burger Lane owner 01711000002, rider 01711000003, admin 01711000004, second rider 01711000005.
+Demo phones (from `pnpm db:seed:demo`): customer 01711000001, Burger Lane owner 01711000002, rider 01711000003, admin 01711000004, second rider 01711000005.
 
 ## Layout
 
