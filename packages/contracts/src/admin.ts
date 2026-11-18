@@ -1,4 +1,4 @@
-import { ORDER_STATUSES } from '@oregano/domain';
+import { ACCOUNT_STATUSES, ORDER_STATUSES, RIDER_TYPES, TEAM_ROLES } from '@oregano/domain';
 import { z } from 'zod';
 
 export const AdminOrderRow = z.object({
@@ -36,3 +36,30 @@ export type Agency = z.infer<typeof Agency>;
 /** The answer to a suspend or reinstate: the account and where it stands now. */
 export const AccountSummary = z.object({ id: z.uuid(), status: z.enum(['approved', 'suspended']) });
 export type AccountSummary = z.infer<typeof AccountSummary>;
+
+export const TeamMember = z.object({
+  userId: z.uuid(),
+  phone: z.string(),
+  name: z.string().nullable(),
+  role: z.enum(TEAM_ROLES),
+  grantedAt: z.iso.datetime(),
+});
+export type TeamMember = z.infer<typeof TeamMember>;
+
+/** An approved or suspended rider, for the accounts tab. Names only: no phone numbers. */
+export const AdminRiderRow = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  type: z.enum(RIDER_TYPES),
+  status: z.enum(ACCOUNT_STATUSES),
+  agencyName: z.string().nullable(),
+});
+export type AdminRiderRow = z.infer<typeof AdminRiderRow>;
+
+export const AdminRestaurantRow = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  status: z.enum(['approved', 'suspended']),
+  isOpen: z.boolean(),
+});
+export type AdminRestaurantRow = z.infer<typeof AdminRestaurantRow>;

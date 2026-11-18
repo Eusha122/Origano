@@ -254,3 +254,29 @@ describe('suspending and reinstating accounts', () => {
     });
   });
 });
+
+describe('account lists for the admin accounts tab', () => {
+  const t = withTestApp();
+  const get = async (phone: string, url: string) =>
+    t.app().inject({ method: 'GET', url, headers: t.as(await t.signIn(phone)) });
+
+  it('lists approved and suspended riders and all restaurants by name, without phone numbers', async () => {
+    const riders = await get(ONBOARDING, '/v1/admin/riders');
+    expect(riders.statusCode).toBe(200);
+    const body = riders.json() as { riders: { name: string; status: string; type: string }[] };
+    expect(body.riders.map((r) => r.name).sort()).toEqual(['Karim', 'Rahim']);
+    expect(body.riders[0]).toMatchObject({ status: 'approved', type: 'independent', agencyName: null });
+    expect(riders.body).not.toMatch(/\+?8801[0-9]{9}/);
+
+    const restaurants = await get(ONBOARDING, '/v1/admin/restaurants');
+    expect(restaurants.json()).toMatchObject({
+      restaurants: [{ id: t.demo().restaurantId, name: 'Burger Lane', status: 'approved' }],
+    });
+  });
+
+  it('needs accounts.manage', async () => {
+    expect((await get(SUPPORT, '/v1/admin/riders')).statusCode).toBe(403);
+    expect((await get(SUPPORT, '/v1/admin/restaurants')).statusCode).toBe(403);
+    expect((await get(CUSTOMER, '/v1/admin/riders')).statusCode).toBe(403);
+  });
+});

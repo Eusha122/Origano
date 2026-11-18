@@ -311,4 +311,49 @@ describe('silent refresh', () => {
     });
     expect(await client.riderApplication()).toBeNull();
   });
+
+  it('documentLink parses the ticket and expiry, and documentImage sends the ticket in a header, never the URL', async () => {
+    const seen: { url: string; headers: Record<string, string> }[] = [];
+    const link = {
+      url: '/v1/admin/documents/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b9a/content',
+      ticket: 'payload.mac',
+      expiresAt: '2026-11-18T12:05:00.000Z',
+    };
+    const fake: typeof fetch = async (input, init) => {
+      const url = String(input);
+      seen.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
+      if (url.endsWith('/link')) return new Response(JSON.stringify(link), { status: 200 });
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), {
+        status: 200,
+        headers: { 'content-type': 'image/jpeg' },
+      });
+    };
+    const client = createApiClient({ baseUrl: 'http://api.test', session: storeWith('tok'), fetch: fake });
+    const issued = await client.documentLink('3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b9a');
+    expect(issued).toEqual(link);
+    const blob = await client.documentImage(issued);
+    expect(blob.size).toBe(4);
+    const open = seen[1];
+    expect(open?.url).toBe(`http://api.test${link.url}`);
+    expect(open?.url).not.toContain('payload.mac');
+    expect(open?.headers['x-document-ticket']).toBe('payload.mac');
+    expect(open?.headers.authorization).toBe('Bearer tok');
+  });
+
+  it('documentImage turns 403 and 410 into the API error codes', async () => {
+    const link = { url: '/v1/admin/documents/x/content', ticket: 't', expiresAt: '2026-11-18T12:05:00.000Z' };
+    const body = (code: string) => ({ error: { code, message: 'm', requestId: 'r' } });
+    const expired = createApiClient({
+      baseUrl: 'http://api.test',
+      session: storeWith('tok'),
+      fetch: fakeFetch(403, body('link_expired')),
+    });
+    await expect(expired.documentImage(link)).rejects.toMatchObject({ status: 403, code: 'link_expired' });
+    const gone = createApiClient({
+      baseUrl: 'http://api.test',
+      session: storeWith('tok'),
+      fetch: fakeFetch(410, body('document_deleted')),
+    });
+    await expect(gone.documentImage(link)).rejects.toMatchObject({ status: 410, code: 'document_deleted' });
+  });
 });

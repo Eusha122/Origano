@@ -1,6 +1,14 @@
 import {
+  type AccountSummary,
   AdminOrderRow,
+  AdminRestaurantRow,
+  AdminRiderRow,
+  Agency,
   ApiErrorBody,
+  ApplicationQueueItem,
+  type ApproveRestaurantBody,
+  type CreateAgencyBody,
+  DocumentLink,
   DocumentSummary,
   type ErrorCode,
   Me,
@@ -13,12 +21,14 @@ import {
   RestaurantDetail,
   RestaurantListResponse,
   type RiderApplicationBody,
+  RiderApplicationDetail,
   RiderApplicationView,
   RiderInvite,
   RiderOffer,
   RiderZone,
   SessionResponse,
   StaffMember,
+  TeamMember,
 } from '@oregano/contracts';
 import type { ReadyMinutes, RejectReason } from '@oregano/domain';
 import { z } from 'zod';
@@ -119,6 +129,29 @@ export type ApiClient = {
   saveRiderApplication(body: RiderApplicationBody): Promise<RiderApplicationView>;
   uploadRiderDocument(kind: string, file: UploadFile): Promise<DocumentSummary>;
   submitRiderApplication(): Promise<RiderApplicationView>;
+  /** The review queue: names only. Defaults to applications under review. */
+  adminApplications(filter?: { kind?: 'restaurant' | 'rider'; status?: string }): Promise<ApplicationQueueItem[]>;
+  restaurantApplicationDetail(id: string): Promise<RestaurantApplicationView>;
+  riderApplicationDetail(userId: string): Promise<RiderApplicationDetail>;
+  approveRestaurantApplication(id: string, body: ApproveRestaurantBody): Promise<RestaurantApplicationView>;
+  rejectRestaurantApplication(id: string, reason: string): Promise<RestaurantApplicationView>;
+  approveRiderApplication(userId: string): Promise<RiderApplicationDetail>;
+  rejectRiderApplication(userId: string, reason: string): Promise<RiderApplicationDetail>;
+  adminRiders(): Promise<AdminRiderRow[]>;
+  adminRestaurants(): Promise<AdminRestaurantRow[]>;
+  suspendRider(userId: string, reason: string): Promise<AccountSummary>;
+  reinstateRider(userId: string): Promise<AccountSummary>;
+  suspendRestaurant(id: string, reason: string): Promise<AccountSummary>;
+  reinstateRestaurant(id: string): Promise<AccountSummary>;
+  agencies(): Promise<Agency[]>;
+  createAgency(body: CreateAgencyBody): Promise<Agency>;
+  suspendAgency(id: string, reason: string): Promise<AccountSummary>;
+  reinstateAgency(id: string): Promise<AccountSummary>;
+  team(): Promise<TeamMember[]>;
+  /** Asks for a five-minute link to one identity document. Every link is recorded in the audit log. */
+  documentLink(documentId: string): Promise<DocumentLink>;
+  /** Opens the link: the ticket goes in a header, never the URL. Throws ApiError 403 link_expired or 410 document_deleted. */
+  documentImage(link: Pick<DocumentLink, 'url' | 'ticket'>): Promise<Blob>;
 };
 
 const Orders = z.object({ orders: z.array(Order) });
@@ -127,6 +160,12 @@ const AdminOrders = z.object({ orders: z.array(AdminOrderRow) });
 const Staff = z.object({ members: z.array(StaffMember) });
 const RiderInvites = z.object({ invites: z.array(RiderInvite) });
 const Zones = z.object({ zones: z.array(RiderZone) });
+const Queue = z.object({ items: z.array(ApplicationQueueItem) });
+const AdminRiders = z.object({ riders: z.array(AdminRiderRow) });
+const AdminRestaurants = z.object({ restaurants: z.array(AdminRestaurantRow) });
+const Agencies = z.object({ agencies: z.array(Agency) });
+const Team = z.object({ members: z.array(TeamMember) });
+const AccountSummarySchema = z.object({ id: z.string(), status: z.enum(['approved', 'suspended']) });
 
 type Request = {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -225,6 +264,44 @@ export function createApiClient(opts: {
       throw new ApiError(res.status, 'internal', `Request failed with status ${res.status}`, requestId);
     }
     return { status: res.status, requestId, json };
+  }
+
+  /** A GET that returns bytes. Failures carry the same error body as every other call. */
+  async function fetchBlob(req: { path: string; headers?: Record<string, string> }): Promise<{ blob: Blob }> {
+    const headers: Record<string, string> = { ...req.headers };
+    const token = session.getAccessToken();
+    if (token) headers.authorization = `Bearer ${token}`;
+    const signal = timeoutSignal(timeoutMs);
+    let res: Response;
+    try {
+      res = await doFetch(`${base}${req.path}`, { method: 'GET', headers, signal });
+    } catch (error) {
+      throw networkError(error, signal);
+    }
+    if (!res.ok) {
+      let json: unknown = null;
+      try {
+        json = JSON.parse(await res.text());
+      } catch {
+        // Not an error body: fall through to the generic failure below.
+      }
+      const parsed = ApiErrorBody.safeParse(json);
+      if (parsed.success) {
+        const { code, message, requestId } = parsed.data.error;
+        throw new ApiError(res.status, code, message, requestId);
+      }
+      throw new ApiError(
+        res.status,
+        'internal',
+        `Request failed with status ${res.status}`,
+        res.headers.get('x-request-id') ?? '',
+      );
+    }
+    try {
+      return { blob: await res.blob() };
+    } catch (error) {
+      throw networkError(error, signal);
+    }
   }
 
   /** In browser mode the page must never hold the refresh token, whatever the server sent. */
@@ -388,6 +465,41 @@ export function createApiClient(opts: {
     saveRiderApplication: (body) => put(RiderApplicationView, '/v1/onboarding/rider', body),
     uploadRiderDocument: (kind, file) => upload(DocumentSummary, `/v1/onboarding/rider/documents/${id(kind)}`, file),
     submitRiderApplication: () => post(RiderApplicationView, '/v1/onboarding/rider/submit'),
+    adminApplications: async (filter) => {
+      const query = new URLSearchParams();
+      if (filter?.kind) query.set('kind', filter.kind);
+      if (filter?.status) query.set('status', filter.status);
+      const suffix = query.size > 0 ? `?${query}` : '';
+      return (await get(Queue, `/v1/admin/applications${suffix}`)).items;
+    },
+    restaurantApplicationDetail: (appId) =>
+      get(RestaurantApplicationView, `/v1/admin/applications/restaurant/${id(appId)}`),
+    riderApplicationDetail: (userId) => get(RiderApplicationDetail, `/v1/admin/applications/rider/${id(userId)}`),
+    approveRestaurantApplication: (appId, body) =>
+      post(RestaurantApplicationView, `/v1/admin/applications/restaurant/${id(appId)}/approve`, body),
+    rejectRestaurantApplication: (appId, reason) =>
+      post(RestaurantApplicationView, `/v1/admin/applications/restaurant/${id(appId)}/reject`, { reason }),
+    approveRiderApplication: (userId) =>
+      post(RiderApplicationDetail, `/v1/admin/applications/rider/${id(userId)}/approve`),
+    rejectRiderApplication: (userId, reason) =>
+      post(RiderApplicationDetail, `/v1/admin/applications/rider/${id(userId)}/reject`, { reason }),
+    adminRiders: async () => (await get(AdminRiders, '/v1/admin/riders')).riders,
+    adminRestaurants: async () => (await get(AdminRestaurants, '/v1/admin/restaurants')).restaurants,
+    suspendRider: (userId, reason) => post(AccountSummarySchema, `/v1/admin/riders/${id(userId)}/suspend`, { reason }),
+    reinstateRider: (userId) => post(AccountSummarySchema, `/v1/admin/riders/${id(userId)}/reinstate`),
+    suspendRestaurant: (rid, reason) =>
+      post(AccountSummarySchema, `/v1/admin/restaurants/${id(rid)}/suspend`, { reason }),
+    reinstateRestaurant: (rid) => post(AccountSummarySchema, `/v1/admin/restaurants/${id(rid)}/reinstate`),
+    agencies: async () => (await get(Agencies, '/v1/admin/agencies')).agencies,
+    createAgency: (body) => post(Agency, '/v1/admin/agencies', body),
+    suspendAgency: (aid, reason) => post(AccountSummarySchema, `/v1/admin/agencies/${id(aid)}/suspend`, { reason }),
+    reinstateAgency: (aid) => post(AccountSummarySchema, `/v1/admin/agencies/${id(aid)}/reinstate`),
+    team: async () => (await get(Team, '/v1/admin/team')).members,
+    documentLink: (documentId) => post(DocumentLink, `/v1/admin/documents/${id(documentId)}/link`),
+    documentImage: async (link) => {
+      const { blob } = await fetchBlob({ path: link.url, headers: { 'x-document-ticket': link.ticket } });
+      return blob;
+    },
   };
 }
 

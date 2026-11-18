@@ -69,6 +69,14 @@ describe('i18n', () => {
     expect(messages.bn['join.intro']).not.toBe(messages.en['join.intro']);
   });
 
+  it('has the admin dashboard strings, with labels staying English in Bangla', () => {
+    expect(t('en', 'admin.teamNote')).toBe('Team roles are changed by an operator.');
+    expect(messages.bn['admin.teamNote']).not.toBe(messages.en['admin.teamNote']);
+    for (const key of ['admin.tabApplications', 'admin.approve', 'admin.waiveLicence', 'admin.createAgency'] as const) {
+      expect(messages.bn[key], key).toBe(messages.en[key]);
+    }
+  });
+
   describe('order status words', () => {
     it('tells the customer a ready order is waiting for a rider until one claims it', () => {
       expect(t('en', orderStatusKey('ready', 'customer', false))).toBe('Ready. Waiting for a rider.');

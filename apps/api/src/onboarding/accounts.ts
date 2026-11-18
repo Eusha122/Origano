@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import type { AccountSummary, Agency, CreateAgencyBody } from '@oregano/contracts';
+import type { AccountSummary, AdminRestaurantRow, AdminRiderRow, Agency, CreateAgencyBody } from '@oregano/contracts';
 import { accountTransition, normalizeBdPhone } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import { type AuditAction, writeAudit } from '../admin/audit';
@@ -169,4 +169,32 @@ function audit(
   data: Record<string, number> = {},
 ): Promise<void> {
   return writeAudit(tx, { actor: { type: 'user', id: adminId }, action, targetType, targetId, data });
+}
+
+/** Riders who have been approved at some point (approved or suspended), for the accounts tab. Names only. */
+export async function listRiderAccounts(db: Db): Promise<AdminRiderRow[]> {
+  const rows = await db.execute<{
+    user_id: string;
+    name: string | null;
+    type: AdminRiderRow['type'];
+    status: AdminRiderRow['status'];
+    agency_name: string | null;
+  }>(sql`
+    SELECT r.user_id, u.name, r.type, r.status, a.name AS agency_name
+    FROM riders r JOIN users u ON u.id = r.user_id LEFT JOIN agencies a ON a.id = r.agency_id
+    WHERE r.status IN ('approved', 'suspended') ORDER BY u.name, r.user_id`);
+  return rows.map((r) => ({
+    userId: r.user_id,
+    name: r.name ?? '',
+    type: r.type,
+    status: r.status,
+    agencyName: r.agency_name,
+  }));
+}
+
+export async function listRestaurantAccounts(db: Db): Promise<AdminRestaurantRow[]> {
+  const rows = await db.execute<{ id: string; name_en: string; status: 'approved' | 'suspended'; is_open: boolean }>(
+    sql`SELECT id, name_en, status, is_open FROM restaurants ORDER BY name_en, id`,
+  );
+  return rows.map((r) => ({ id: r.id, name: r.name_en, status: r.status, isOpen: r.is_open }));
 }

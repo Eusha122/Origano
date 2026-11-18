@@ -17,6 +17,8 @@ import { listTeam } from '../identity/team';
 import {
   createAgency,
   listAgencies,
+  listRestaurantAccounts,
+  listRiderAccounts,
   reinstateAgency,
   reinstateRestaurant,
   reinstateRider,
@@ -176,6 +178,15 @@ export function adminRoutes(app: FastifyInstance, config: Config, { db, clock }:
   app.post<{ Params: { id: string } }>('/admin/agencies/:id/reinstate', async (request) => {
     const admin = requirePermission(request, 'accounts.manage');
     return reinstateAgency(db, admin.id, uuid(request.params.id));
+  });
+
+  app.get('/admin/riders', async (request) => {
+    requirePermission(request, 'accounts.manage');
+    return { riders: await listRiderAccounts(db) };
+  });
+  app.get('/admin/restaurants', async (request) => {
+    requirePermission(request, 'accounts.manage');
+    return { restaurants: await listRestaurantAccounts(db) };
   });
 
   app.get('/admin/agencies', async (request) => {
