@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
 import { adminRoutes } from './admin/routes';
@@ -16,6 +17,8 @@ import { registerAuth } from './identity/auth';
 import { devRoutes } from './identity/dev-routes';
 import { identityRoutes } from './identity/routes';
 import { authenticateAccess } from './identity/sessions';
+import { MAX_DOCUMENT_BYTES } from './media/image';
+import type { ObjectStore } from './media/store';
 import type { SmsDeps } from './notifications/sms/queue';
 import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
@@ -24,7 +27,7 @@ import { registerRateLimits } from './security/rate-limit';
 
 export type { ReadinessCheck } from './health/routes';
 
-export type Services = { db: Db; sms: SmsDeps; redis: Redis; realtime?: RealtimeHub };
+export type Services = { db: Db; sms: SmsDeps; redis: Redis; store: ObjectStore; realtime?: RealtimeHub };
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -92,6 +95,11 @@ export async function buildApp(deps: {
         .code(error.statusCode)
         .send({ error: { code: error.code, message: error.message, requestId: request.id } });
     }
+    if ((error as { code?: unknown }).code === 'FST_REQ_FILE_TOO_LARGE') {
+      return reply
+        .code(413)
+        .send({ error: { code: 'document_too_large', message: 'That file is too large', requestId: request.id } });
+    }
     const clientStatus = clientErrorStatus(error);
     if (clientStatus !== null) {
       request.log.info({ err: error }, 'client error');
@@ -106,6 +114,8 @@ export async function buildApp(deps: {
 
   await app.register(helmet);
   await app.register(cookie);
+  // Documents only: one file of at most 8 MB, no other fields. A truncated file is refused as too large.
+  await app.register(multipart, { limits: { fileSize: MAX_DOCUMENT_BYTES, files: 1, fields: 0 } });
 
   // Only the listed origins may call the API from a browser; an empty list allows none.
   await app.register(cors, {

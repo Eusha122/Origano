@@ -103,5 +103,9 @@ export const bn: Record<MessageKey, string> = {
   'error.smsUnavailable': 'এখন কোড পাঠানো যাচ্ছে না। কয়েক মিনিট পরে আবার চেষ্টা করুন।',
   'error.rateLimited': 'অনেকগুলো অনুরোধ হয়েছে। এক মিনিট অপেক্ষা করে আবার চেষ্টা করুন।',
   'error.tooManyOpenOrders': 'আপনার অনেকগুলো অর্ডার চলছে। একটি পৌঁছালে আবার অর্ডার করুন।',
+  'error.unsupportedDocument': 'ফাইলটি পড়া যায়নি। JPEG, PNG বা WebP ফরম্যাটের একটি পরিষ্কার ছবি দিন।',
+  'error.documentTooLarge': 'ফাইলটি অনেক বড়। 8 MB এর কম আকারের ছবি দিন।',
+  'error.documentDeleted': 'এই নথিটি মুছে ফেলা হয়েছে।',
+  'error.linkExpired': 'লিংকটির মেয়াদ শেষ। নতুন লিংকের জন্য আবেদনটি আবার খুলুন।',
   'sms.otp': 'আপনার Oregano কোড {code}। 5 মিনিটে মেয়াদ শেষ হবে। কাউকে জানাবেন না।',
 };

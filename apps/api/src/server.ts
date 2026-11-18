@@ -3,6 +3,7 @@ import { buildApp } from './app';
 import { type Config, ConfigError, loadConfig } from './config';
 import { createDb, postgresCheck, redisCheck } from './db/client';
 import { RealtimeHub } from './events/realtime';
+import { openStore } from './media/store';
 
 async function main(): Promise<void> {
   let config: Config;
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
       db,
       sms: { keys: config.dataKeys, retainUntilExpiry: config.devOtpPeek },
       redis: limitsRedis,
+      store: await openStore(config),
       realtime,
     },
   });

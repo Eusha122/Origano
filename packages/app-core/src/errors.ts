@@ -35,6 +35,10 @@ const KEYS: Record<ErrorCode, MessageKey> = {
   bad_request: 'error.generic',
   payload_too_large: 'error.generic',
   unsupported_media_type: 'error.generic',
+  unsupported_document: 'error.unsupportedDocument',
+  document_too_large: 'error.documentTooLarge',
+  document_deleted: 'error.documentDeleted',
+  link_expired: 'error.linkExpired',
   internal: 'error.generic',
 };
 

@@ -42,6 +42,20 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `services` cannot pass a container command, and SeaweedFS needs one, so it is started here.
+      - name: Start object storage (SeaweedFS, S3 on port 9000)
+        run: |
+          docker run -d --name s3 -p 9000:9000 \
+            -v "$PWD/infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro" \
+            chrislusf/seaweedfs:4.54 \
+            server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -ip.bind=0.0.0.0
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9000/ || true)
+            if [ "$code" = "403" ] || [ "$code" = "200" ]; then exit 0; fi
+            sleep 2
+          done
+          docker logs s3
+          exit 1
       - name: Create the test databases
         run: |
           PGPASSWORD=oregano psql -h localhost -U oregano -d oregano -c 'CREATE DATABASE oregano_test OWNER oregano;'

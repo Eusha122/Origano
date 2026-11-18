@@ -100,6 +100,10 @@ export const en = {
   'error.smsUnavailable': 'We could not send a code right now. Try again in a few minutes.',
   'error.rateLimited': 'Too many requests. Wait a minute and try again.',
   'error.tooManyOpenOrders': 'You have too many orders in progress. Wait for one to arrive, then order again.',
+  'error.unsupportedDocument': 'We could not read that file. Upload a clear JPEG, PNG or WebP photo.',
+  'error.documentTooLarge': 'That file is too large. Upload a photo under 8 MB.',
+  'error.documentDeleted': 'This document has been deleted.',
+  'error.linkExpired': 'This link has expired. Open the application again for a new one.',
   'sms.otp': 'Your Oregano code is {code}. It expires in 5 minutes. Never share it.',
 } as const;
 

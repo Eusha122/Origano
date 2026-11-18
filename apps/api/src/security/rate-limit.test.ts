@@ -2,6 +2,7 @@ import { Redis } from 'ioredis';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
 import { loadConfig } from '../config';
+import { createS3Store } from '../media/store';
 import { withTestApp } from '../testing/app';
 import { withTestDb } from '../testing/db';
 import { TEST_DATA_KEYS } from '../testing/keys';
@@ -103,7 +104,12 @@ describe('when Redis is down', () => {
     const app = await buildApp({
       config,
       checks: [],
-      services: { db, sms: { keys: config.dataKeys, retainUntilExpiry: false }, redis },
+      services: {
+        db,
+        sms: { keys: config.dataKeys, retainUntilExpiry: false },
+        redis,
+        store: createS3Store(config.s3),
+      },
     });
     try {
       const started = Date.now();

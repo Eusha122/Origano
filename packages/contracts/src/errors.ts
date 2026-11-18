@@ -29,6 +29,10 @@ export const ERROR_CODES = [
   'bad_request',
   'payload_too_large',
   'unsupported_media_type',
+  'unsupported_document',
+  'document_too_large',
+  'document_deleted',
+  'link_expired',
   'internal',
 ] as const;
 

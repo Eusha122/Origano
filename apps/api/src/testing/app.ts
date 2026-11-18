@@ -8,6 +8,7 @@ import { type Limits, loadConfig, type SessionLimits } from '../config';
 import type { Db } from '../db/client';
 import { type DemoIds, seedDemo } from '../dev/seed-demo';
 import { RealtimeHub } from '../events/realtime';
+import { openStore } from '../media/store';
 import { peekLatestOtpText } from '../notifications/sms/queue';
 import { withTestDb } from './db';
 import { TEST_DATA_KEYS } from './keys';
@@ -45,6 +46,8 @@ export function withTestApp(
     RATE_LIMIT_PREFIX: `test-${randomBytes(6).toString('hex')}`,
     TRUST_PROXY: options.trustProxy?.join(',') ?? '',
     CORS_ORIGINS: 'http://localhost:8081',
+    S3_ENDPOINT: process.env.S3_ENDPOINT ?? 'http://localhost:9000',
+    S3_BUCKET: 'oregano-test',
   });
   const config = {
     ...base,
@@ -74,10 +77,11 @@ export function withTestApp(
   beforeAll(async () => {
     // The limits fail open until Redis is connected, so a test must not start before it is.
     if (redis.status !== 'ready') await new Promise<void>((resolve) => redis.once('ready', () => resolve()));
+    const store = await openStore(config);
     instance = await buildApp({
       config,
       checks: [],
-      services: { db, sms: { keys: config.dataKeys, retainUntilExpiry: true }, redis, realtime: hub },
+      services: { db, sms: { keys: config.dataKeys, retainUntilExpiry: true }, redis, store, realtime: hub },
     });
     if (hub) {
       await hub.start();

@@ -16,6 +16,9 @@ export const E2E_DATABASE_URL =
 /** Redis for the e2e servers; override with E2E_REDIS_URL when the services are not on localhost. */
 export const E2E_REDIS_URL = process.env.E2E_REDIS_URL ?? 'redis://localhost:6379';
 
+/** Document storage for the e2e servers; override with E2E_S3_ENDPOINT when the services are not on localhost. */
+export const E2E_S3_ENDPOINT = process.env.E2E_S3_ENDPOINT ?? 'http://localhost:9000';
+
 /** The demo users from `seedDemo`. */
 export const PHONES = {
   customer: '01711000001',
