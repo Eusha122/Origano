@@ -103,6 +103,22 @@ export async function listRestaurants(db: Db, opts: { zoneId?: string; point?: P
   return withIntervals(db, rows.map(toRestaurantRow));
 }
 
+/** The approved restaurants with these ids, in the order of `ids`. */
+export async function listRestaurantsByIds(db: Db, ids: string[], point?: Point): Promise<RestaurantRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await db.execute<RestaurantDbRow>(sql`
+    SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
+      r.is_open, r.prep_minutes, r.zone_id, z.timezone, r.busy_extra_minutes, r.cover_image_key,
+      ${distanceColumn(point)} AS distance_m
+    FROM restaurants r JOIN zones z ON z.id = r.zone_id
+    WHERE r.status = 'approved' AND r.id IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})`);
+  const byId = new Map((await withIntervals(db, rows.map(toRestaurantRow))).map((r) => [r.id, r]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
+}
+
 export async function findRestaurantBySlug(db: Db, slug: string, point?: Point): Promise<RestaurantRow | null> {
   const rows = await db.execute<RestaurantDbRow>(sql`
     SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,

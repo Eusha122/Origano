@@ -16,7 +16,7 @@ const invalidLocation = () => new AppError('invalid_location', 400, 'That locati
  * The customer's point, or null when neither coordinate was sent. Sending only one, an empty one
  * or a non-number is an error (the contract's number coercion would turn an empty value into 0).
  */
-function parseLocation(query: unknown): { lat: number; lng: number } | null {
+export function parseLocation(query: unknown): { lat: number; lng: number } | null {
   const q = (query ?? {}) as Record<string, unknown>;
   if (q.lat === undefined && q.lng === undefined) return null;
   if (typeof q.lat !== 'string' || typeof q.lng !== 'string' || q.lat.trim() === '' || q.lng.trim() === '') {
@@ -27,7 +27,7 @@ function parseLocation(query: unknown): { lat: number; lng: number } | null {
   return parsed.data;
 }
 
-async function zoneFor(db: Services['db'], point: { lat: number; lng: number }): Promise<Zone | null> {
+export async function zoneFor(db: Services['db'], point: { lat: number; lng: number }): Promise<Zone | null> {
   try {
     return await findZoneForPoint(db, point);
   } catch (error) {
@@ -36,7 +36,7 @@ async function zoneFor(db: Services['db'], point: { lat: number; lng: number }):
   }
 }
 
-function summary(r: RestaurantRow, zone: Zone | null, now: Date) {
+export function summary(r: RestaurantRow, zone: Zone | null, now: Date) {
   const state = stateOf(r, now);
   return {
     id: r.id,

@@ -12,6 +12,7 @@ import { hoursRoutes } from './catalog/hours-routes';
 import { menuRoutes } from './catalog/menu-routes';
 import { photoRoutes } from './catalog/photo-routes';
 import { catalogRoutes } from './catalog/routes';
+import { searchRoutes } from './catalog/search-routes';
 import { catalogStaffRoutes } from './catalog/staff-routes';
 import type { Config } from './config';
 import type { Db } from './db/client';
@@ -196,6 +197,7 @@ export async function buildApp(deps: {
         hoursRoutes(v1, services);
         discountRoutes(v1, services);
         photoRoutes(v1, services);
+        searchRoutes(v1, services);
         publicMediaRoutes(v1, services);
         orderRoutes(v1, config, services);
         restaurantRoutes(v1, services);

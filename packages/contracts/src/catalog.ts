@@ -89,3 +89,25 @@ export const RestaurantDetail = RestaurantSummary.extend({
   ),
 });
 export type RestaurantDetail = z.infer<typeof RestaurantDetail>;
+
+export const SearchResponse = z.object({
+  restaurants: z.array(RestaurantSummary),
+  dishes: z.array(
+    z.object({
+      item: z.object({
+        id: z.uuid(),
+        nameEn: z.string(),
+        nameBn: z.string(),
+        price: z.number().int(),
+        originalPrice: z.number().int().nullable(),
+        imageUrl: z.string().nullable(),
+        isAvailable: z.boolean(),
+      }),
+      restaurant: RestaurantSummary,
+    }),
+  ),
+});
+export type SearchResponse = z.infer<typeof SearchResponse>;
+
+export const PopularTermsResponse = z.object({ terms: z.array(z.string()) });
+export type PopularTermsResponse = z.infer<typeof PopularTermsResponse>;
