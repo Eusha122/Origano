@@ -11,7 +11,7 @@ The platform is too large for one plan. It is split into eleven plans, each endi
 | 01   | Foundation                         | none           | Done, merged 16 Nov 2026                                                                        |
 | 02   | First order, end to end            | 01             | Written: `2026-11-16-plan-02-first-order.md`                                                    |
 | 03   | Identity hardening and onboarding  | 02             | Done except Task 21 (two real SMS providers, waiting for the founder to name them), 18 Nov 2026 |
-| 04   | Catalog and zones, complete        | 02             | Written: `2026-11-18-plan-04-catalog-and-zones.md`                                              |
+| 04   | Catalog and zones, complete        | 02             | Done on branch `plan-04-catalog-and-zones`, 19 Nov 2026 (not merged yet)                        |
 | 05   | Customer experience, complete      | 03, 04         | To write                                                                                        |
 | 06   | Order operations and failure paths | 02             | To write                                                                                        |
 | 07   | Money                              | 06             | To write                                                                                        |
@@ -43,6 +43,8 @@ Real SMS through two providers, all OTP limits from blueprint section 7, session
 **Must include (from the Plan 02 security review):** OTP requests capped per phone and per IP address per hour and per day, not only a 60-second resend gap; wrong-attempt counts that survive a new code request (today a new request resets them, which allows unbounded guessing); a production refusal to start with the logging OTP sender; and a unique constraint so one phone has at most one live challenge. The API must not be exposed to the internet before these land. Also from the Plan 02 final review: per-user and per-IP rate limits on every write endpoint, especially order placement (a signed-in account can otherwise flood a restaurant with real cash orders), per-IP limits on OTP verification across many phones and on the public restaurant list, and a per-IP cap on WebSocket connections.
 
 ### Plan 04: Catalog and zones, complete
+
+**Status: done on its branch (19 November 2026), waiting to be merged.** `pnpm verify` passes (424 API tests, 18 browser tests) and a clean-container run was made. The plan is `2026-11-18-plan-04-catalog-and-zones.md`; the decisions it took are in blueprint section 13. Plan 05 handoff: `2026-11-19-plan-05-handoff.md`.
 
 Menu manager, item options (sizes, add-ons), opening hours and auto-close, busy mode, "sold out today", restaurant discounts, image upload and resizing, search across restaurants, dishes and cuisines, zone drawing and fee settings in admin.
 **Done when:** every item in book sections 3.4 to 3.6, 4.2, 4.4 and 4.5 works against the API.
