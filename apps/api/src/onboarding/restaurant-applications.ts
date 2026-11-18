@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { writeAudit } from '../admin/audit';
 import type { Db, Executor } from '../db/client';
 import { AppError } from '../errors';
-import { type DocumentKind, type DocumentSubject, listDocuments, type VaultDeps } from '../media/vault';
+import { clearDecision, type DocumentKind, type DocumentSubject, listDocuments, type VaultDeps } from '../media/vault';
 import { sealString } from '../security/crypto';
 
 /** The document kinds a restaurant owner uploads. */
@@ -29,11 +29,13 @@ type Row = {
   no_trade_licence: boolean;
   rejection_reason: string | null;
   restaurant_id: string | null;
+  applicant_user_id?: string;
 };
 
 const COLUMNS = sql`id, status, restaurant_name, cuisine, address_line, restaurant_phone, owner_name, payout_method,
   payout_account_sealed, payout_account_last4, no_trade_licence, rejection_reason, restaurant_id`;
 
+export type { Row as RestaurantApplicationRow };
 export const applicationSubject = (id: string): DocumentSubject => ({ type: 'restaurant_application', id });
 
 const notFound = () => new AppError('not_found', 404, 'Not found.');
@@ -99,6 +101,31 @@ export async function touchApplication(db: Executor, applicationId: string): Pro
 const lockApplicant = (tx: Executor, userId: string) =>
   tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`restaurant-application:${userId}`}))`);
 
+/** Writes a new application (applied) and its audit row. `teamMemberId` is set when the team applied for the owner (door 1). */
+export async function insertApplication(
+  tx: Executor,
+  keys: VaultDeps['keys'],
+  who: { applicantUserId: string; teamMemberId?: string },
+  body: RestaurantApplicationBody,
+): Promise<string> {
+  const id = randomUUID();
+  const phone = body.restaurantPhone === null ? null : normalizeBdPhone(body.restaurantPhone);
+  await tx.execute(sql`
+    INSERT INTO restaurant_applications (id, applicant_user_id, created_by_user_id, restaurant_name, cuisine,
+      address_line, restaurant_phone, owner_name, payout_method, payout_account_sealed, payout_account_last4)
+    VALUES (${id}, ${who.applicantUserId}, ${who.teamMemberId ?? null}, ${body.restaurantName}, ${body.cuisine},
+      ${body.addressLine}, ${phone}, ${body.ownerName}, ${body.payoutMethod},
+      ${sealString(keys, body.payoutAccount, id)}, ${body.payoutAccount.replace(/[^0-9]/g, '').slice(-4)})`);
+  await writeAudit(tx, {
+    actor: { type: 'user', id: who.teamMemberId ?? who.applicantUserId },
+    action: 'application.created',
+    targetType: 'restaurant_application',
+    targetId: id,
+    data: { byTeam: who.teamMemberId !== undefined },
+  });
+  return id;
+}
+
 /** Creates the application, or updates it while it is applied or rejected. */
 export async function saveMyApplication(
   deps: Pick<VaultDeps, 'db' | 'keys'>,
@@ -121,18 +148,7 @@ export async function saveMyApplication(
         WHERE id = ${existing.id}`);
       return present(tx, (await findMine(tx, userId)) as Row);
     }
-    const id = randomUUID();
-    await tx.execute(sql`
-      INSERT INTO restaurant_applications (id, applicant_user_id, restaurant_name, cuisine, address_line,
-        restaurant_phone, owner_name, payout_method, payout_account_sealed, payout_account_last4)
-      VALUES (${id}, ${userId}, ${body.restaurantName}, ${body.cuisine}, ${body.addressLine}, ${phone},
-        ${body.ownerName}, ${body.payoutMethod}, ${sealString(deps.keys, body.payoutAccount, id)}, ${last4})`);
-    await writeAudit(tx, {
-      actor: { type: 'user', id: userId },
-      action: 'application.created',
-      targetType: 'restaurant_application',
-      targetId: id,
-    });
+    await insertApplication(tx, deps.keys, { applicantUserId: userId }, body);
     return present(tx, (await findMine(tx, userId)) as Row);
   });
 }
@@ -154,6 +170,7 @@ export async function submitMyApplication(
     if (view.missing.length > 0 || row.payout_account_sealed === null) {
       throw new AppError('application_incomplete', 422, 'Some details or documents are missing.');
     }
+    if (row.status === 'rejected') await clearDecision(tx, applicationSubject(row.id));
     await tx.execute(sql`
       UPDATE restaurant_applications SET status = ${next}, no_trade_licence = ${noTradeLicence},
         rejection_reason = NULL, submitted_at = now(), last_activity_at = now()
@@ -187,4 +204,16 @@ export async function pruneRestaurantApplicationDetails(db: Db, now: Date): Prom
       AND last_activity_at <= ${now.toISOString()}::timestamptz - make_interval(days => ${ABANDONED_AFTER_DAYS})
     RETURNING id`);
   return rows.length;
+}
+
+/** For the review side: any application by id. */
+export async function findApplicationById(db: Executor, id: string, lock = false): Promise<Row | null> {
+  const rows = await db.execute<Row>(sql`
+    SELECT ${COLUMNS}, applicant_user_id FROM restaurant_applications WHERE id = ${id}
+    ${lock ? sql`FOR UPDATE` : sql``}`);
+  return rows[0] ?? null;
+}
+
+export function presentApplication(db: Executor, row: Row): Promise<RestaurantApplicationView> {
+  return present(db, row);
 }

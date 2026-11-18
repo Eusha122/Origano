@@ -204,3 +204,35 @@ export async function distanceMeters(db: Executor, from: Point, to: Point): Prom
   if (!row) throw new Error('Distance query returned no row');
   return Number(row.d);
 }
+
+const slugBase = (name: string): string =>
+  name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50) || 'restaurant';
+
+/**
+ * Creates a restaurant that is approved but closed: its owner opens it when ready. The slug comes from the name
+ * (`spice-garden`, then `spice-garden-2`, `-3` and so on). Bangla text is copied from English until the owner edits it.
+ */
+export async function createApprovedRestaurant(
+  tx: Executor,
+  r: { zoneId: string; name: string; cuisine: string; addressLine: string; phone: string | null; location: Point },
+): Promise<{ id: string; slug: string }> {
+  const base = slugBase(r.name);
+  for (let n = 1; n < 1000; n++) {
+    const slug = n === 1 ? base : `${base}-${n}`;
+    const rows = await tx.execute<{ id: string }>(sql`
+      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, phone, location,
+        is_open, status)
+      VALUES (${r.zoneId}, ${slug}, ${r.name}, ${r.name}, ${r.cuisine}, ${r.cuisine}, ${r.addressLine}, ${r.phone},
+        ST_SetSRID(ST_MakePoint(${r.location.lng}, ${r.location.lat}), 4326)::geography, false, 'approved')
+      ON CONFLICT (slug) DO NOTHING RETURNING id`);
+    const id = rows[0]?.id;
+    if (id) return { id, slug };
+  }
+  throw new Error('No free restaurant slug');
+}

@@ -245,3 +245,10 @@ export async function pruneDocuments(
   }
   return done;
 }
+
+/** A rejected applicant sent the application again: the files they kept are wanted for a new review. */
+export async function clearDecision(tx: Executor, subject: DocumentSubject): Promise<void> {
+  await tx.execute(sql`
+    UPDATE identity_documents SET review_outcome = NULL, reviewed_by = NULL, reviewed_at = NULL, delete_after = NULL
+    WHERE subject_type = ${subject.type} AND subject_id = ${subject.id} AND status IN ('pending', 'stored')`);
+}

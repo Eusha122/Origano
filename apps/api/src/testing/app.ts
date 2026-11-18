@@ -24,6 +24,10 @@ export function withTestApp(
     trustProxy?: string[];
     /** Session lifetimes, for tests that need a short access token. */
     session?: Partial<SessionLimits>;
+    /** The time document links are issued and checked against. */
+    clock?: () => Date;
+    /** Send logs here, so a test can read what was written. */
+    logStream?: { write(line: string): void };
   } = {},
 ): {
   app: () => FastifyInstance;
@@ -81,7 +85,15 @@ export function withTestApp(
     instance = await buildApp({
       config,
       checks: [],
-      services: { db, sms: { keys: config.dataKeys, retainUntilExpiry: true }, redis, store, realtime: hub },
+      services: {
+        db,
+        sms: { keys: config.dataKeys, retainUntilExpiry: true },
+        redis,
+        store,
+        realtime: hub,
+        clock: options.clock,
+      },
+      logStream: options.logStream,
     });
     if (hub) {
       await hub.start();

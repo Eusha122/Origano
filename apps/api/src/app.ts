@@ -5,6 +5,7 @@ import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
+import { documentRoutes } from './admin/document-routes';
 import { adminRoutes } from './admin/routes';
 import { catalogRoutes } from './catalog/routes';
 import type { Config } from './config';
@@ -29,7 +30,15 @@ import { zoneRoutes } from './zones/routes';
 
 export type { ReadinessCheck } from './health/routes';
 
-export type Services = { db: Db; sms: SmsDeps; redis: Redis; store: ObjectStore; realtime?: RealtimeHub };
+export type Services = {
+  db: Db;
+  sms: SmsDeps;
+  redis: Redis;
+  store: ObjectStore;
+  realtime?: RealtimeHub;
+  /** Tests only: the time document links are issued and checked against. */
+  clock?: () => Date;
+};
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -125,6 +134,14 @@ export async function buildApp(deps: {
     // The refresh cookie travels on /v1/auth calls from the web apps.
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: [
+      'authorization',
+      'content-type',
+      'idempotency-key',
+      'x-oregano-client',
+      'x-request-id',
+      'x-document-ticket',
+    ],
     // The apps quote the request id when something fails, so the browser must let them read it.
     exposedHeaders: ['x-request-id', 'retry-after'],
   });
@@ -147,7 +164,8 @@ export async function buildApp(deps: {
         orderRoutes(v1, config, services);
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);
-        adminRoutes(v1, services);
+        adminRoutes(v1, config, services);
+        documentRoutes(v1, config, services);
         onboardingRoutes(v1, config, services);
         zoneRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services);

@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm';
 import { writeAudit } from '../admin/audit';
 import type { Db, Executor } from '../db/client';
 import { AppError } from '../errors';
-import { type DocumentKind, type DocumentSubject, listDocuments } from '../media/vault';
+import { clearDecision, type DocumentKind, type DocumentSubject, listDocuments } from '../media/vault';
 import { ABANDONED_AFTER_DAYS } from './restaurant-applications';
 
 /** The document kinds a rider uploads. */
@@ -48,6 +48,10 @@ const invalid = (message = 'Some details are missing or wrong.') => new AppError
 const lockApplicant = (tx: Executor, userId: string) =>
   tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`rider-application:${userId}`}))`);
 
+export async function findRiderRow(db: Executor, userId: string, lock = false): Promise<Row | null> {
+  return findRow(db, userId, lock);
+}
+
 async function findRow(db: Executor, userId: string, lock = false): Promise<Row | null> {
   const rows = await db.execute<Row>(sql`
     SELECT r.user_id, u.name, r.zone_id, r.type, r.status, r.vehicle_type, r.vehicle_registration,
@@ -63,6 +67,10 @@ async function findRow(db: Executor, userId: string, lock = false): Promise<Row 
 
 export function missingRiderKinds(stored: readonly DocumentKind[]): RiderDocumentKind[] {
   return RIDER_DOCUMENT_KINDS.filter((kind) => !stored.includes(kind));
+}
+
+export async function presentRider(db: Executor, row: Row): Promise<RiderApplicationView> {
+  return present(db, row);
 }
 
 async function present(db: Executor, row: Row): Promise<RiderApplicationView> {
@@ -193,6 +201,7 @@ export async function submitMyRiderApplication(db: Db, userId: string): Promise<
     if (view.missing.length > 0 || row.guarantor_name === null || row.guarantor_phone === null) {
       throw new AppError('application_incomplete', 422, 'Some details or documents are missing.');
     }
+    if (row.status === 'rejected') await clearDecision(tx, riderSubject(userId));
     await tx.execute(sql`
       UPDATE riders SET status = ${next}, rejection_reason = NULL, submitted_at = now(), last_activity_at = now()
       WHERE user_id = ${userId}`);
