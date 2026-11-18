@@ -3,6 +3,7 @@ import { createDb } from './db/client';
 import { startRelay } from './events/relay';
 import { createProviders } from './notifications/sms/providers';
 import { startSmsDispatcher } from './notifications/sms/queue';
+import { defaultSweepJobs, startSweeper } from './worker/sweeper';
 
 function main(): void {
   let config: Config;
@@ -24,7 +25,8 @@ function main(): void {
     providers,
     log: { warn: (message) => console.warn(message) },
   });
-  console.log('worker started: relaying outbox to redis, sending SMS');
+  const sweeper = startSweeper(db, defaultSweepJobs());
+  console.log('worker started: relaying outbox to redis, sending SMS, sweeping old data');
 
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
@@ -33,6 +35,7 @@ function main(): void {
     try {
       await relay.stop();
       await sms.stop();
+      await sweeper.stop();
       await close();
       process.exit(0);
     } catch (error) {
