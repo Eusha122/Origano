@@ -12,7 +12,7 @@ function contentSecurityPolicy(apiUrl: string): Plugin {
   const ws = `${api.protocol === 'https:' ? 'wss:' : 'ws:'}//${api.host}`;
   const policy = [
     "default-src 'self'",
-    "img-src 'self' blob: data:",
+    `img-src 'self' blob: data: ${api.origin}`,
     `connect-src 'self' ${api.origin} ${ws}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     'font-src https://fonts.gstatic.com',
