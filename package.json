@@ -16,7 +16,7 @@
     "db:seed": "pnpm --filter @oregano/api db:seed",
     "db:seed:demo": "pnpm --filter @oregano/api db:seed:demo",
     "test:e2e": "turbo run test:e2e",
-    "build:web": "pnpm --filter @oregano/customer build:web",
+    "build:web": "pnpm --filter @oregano/customer --filter @oregano/restaurant --filter @oregano/rider build:web && pnpm --filter @oregano/admin build",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build:web && pnpm test:e2e",
     "prepare": "simple-git-hooks"
   },
