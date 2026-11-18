@@ -183,10 +183,26 @@ Riders sign up by phone OTP, choose a type, and upload national ID, photo, vehic
 
 Target: OWASP Application Security Verification Standard, level 2.
 
-- **Sign-in:** 6-digit OTP, stored hashed, valid 5 minutes, 5 attempts. Resend after 60 seconds. At most 5 sends per phone per hour and 20 per IP address per hour. Only numbers matching `+8801[3-9]XXXXXXXX` are accepted, which blocks the common fraud of triggering paid SMS to foreign numbers.
-- **Sessions:** 15-minute access token. 60-day refresh token that is replaced on every use; reuse of an old one revokes the whole session family. Stored in the device keystore on native and an httpOnly cookie on web.
+- **Sign-in:** 6-digit OTP, stored hashed, valid 5 minutes, 5 wrong tries per code. Only numbers matching `+8801[3-9]XXXXXXXX` are accepted, which blocks the common fraud of triggering paid SMS to foreign numbers. Limits (every value is configuration; defaults below):
+
+  | Limit                                      | Default                                                                         |
+  | ------------------------------------------ | ------------------------------------------------------------------------------- |
+  | Resend gap per phone                       | 60 seconds                                                                      |
+  | Sends per phone                            | 5 per hour, 10 per 24 hours                                                     |
+  | Sends per IP address                       | 20 per hour, 100 per 24 hours                                                   |
+  | Sends, whole platform                      | 1,000 per hour (then sign-in answers "unavailable" and an error is logged)      |
+  | Wrong codes per phone, surviving new codes | 10 per rolling 24 hours, then the phone is locked for requests and verification |
+  | Wrong codes per IP, across phones          | 30 per hour                                                                     |
+  | Any route, per IP                          | 300 per minute                                                                  |
+  | Any write, per signed-in user              | 60 per minute                                                                   |
+  | Placing an order, per user                 | 5 per 10 minutes, and at most 3 open orders                                     |
+  | Restaurant list, per IP                    | 120 per minute                                                                  |
+  | WebSocket, per IP                          | 30 upgrades per minute, 20 open connections per API instance                    |
+
+  OTP counters live in PostgreSQL, in the same transaction as the challenge, because they guard real SMS money and must not depend on Redis. General limits live in Redis and fail open, so a Redis outage never blocks ordering (section 8). Per-IP numbers are deliberately generous, because mobile carriers put many customers behind one address; watch the `otp_rate_limited` count after launch. The 24-hour per-phone lock stops code guessing but lets anyone lock a real owner or rider out for a day (ASVS asks for anti-automation that resists lockout abuse). It is mitigated by a warning log `otp_phone_locked` to alert on, and by an audited operator command `otp:unlock`. The client IP counts only when the request comes from a configured trusted proxy.
+- **Sessions:** an opaque 15-minute access token, checked in the database on every request so that suspension, staff removal and reuse detection take effect at once. A 60-day refresh token (sliding, 180-day absolute limit, 12 hours for Oregano team members) that is replaced on every use. A just-replaced token may be used again for 30 seconds, so a lost response on a weak connection or two tabs refreshing together do not sign the user out; reuse after that revokes the whole session family. On web the refresh token lives in an httpOnly, Secure, SameSite=Strict cookie scoped to `/v1/auth` (the web apps and the API must therefore be same-site); native apps receive it in the response body and keep it in the device keystore.
 - **Access control:** every endpoint checks role and ownership on the server. Restaurant staff see only their restaurant. Staff riders see only their restaurant's orders. A rider receives the customer's phone number only while that delivery is active, and the server strips it otherwise.
-- **Personal documents:** national ID images go to a private bucket and are served through signed links valid for 5 minutes, to admins only.
+- **Personal documents:** verify-then-delete, as set out in "Changes since the book". Images sit encrypted in a private bucket and are opened only through audited, expiring, admin-only links.
 - **Admin actions:** every one is written to an audit log with who, what and when.
 - **Abuse:** rate limits on all write endpoints; referral abuse flags for repeated devices and numbers.
 - **Supply chain and secrets:** dependency audit in CI; secrets only in the host's secret store, never in the repository.
@@ -256,7 +272,7 @@ Still open:
 3. **Bangla copy.** A native speaker should review all Bangla strings before launch.
 4. **The defaults in section 11.**
 
-## 13. Research notes
+## 14. Research notes
 
 Bangladesh-specific public sources were thin, and most architecture sources found were secondary guides, not first-hand engineering posts. The decisions above follow widely used patterns (explicit order state machine, outbox, idempotent writes, layered OTP limits) and are sized from the estimates in section 2. Every library choice is re-checked against official documentation when it is installed.
 
@@ -275,3 +291,14 @@ The product book is the starting point. Where a later decision differs from it o
 **Language and prices (all plans).** The app is English with a Bangla option. Plain-language text (status messages, errors, hints, greetings, empty states) is in English and Bangla. Buttons, field labels, prices, numbers and data from restaurants (restaurant, menu and street names, addresses) are English only. Prices read `Tk 280` in both languages. Why: the founder wants the app to read like the apps people already use here, and it halves the text a native speaker must review.
 
 **Hosting and sensitive data (Plans 03 and 11).** The servers will be outside Bangladesh. The founder's lawyer said this is legal. Record the lawyer's answer in writing before launch. Identity documents and photos are verify-then-delete: a rider uploads, an admin checks and approves or rejects, and the file is deleted automatically within 7 days of the decision. Only the result is kept: who checked, when, and the document type, never the ID number. While a file exists it sits in private encrypted object storage, not in the main database, readable only by admins through links that expire in minutes, and every opening is logged. These files never appear in logs or long-lived backups. Cost if wrong: after deletion, a dispute can only show that a check happened, not the document. The 7 days is a default.
+
+**Identity and onboarding details (Plan 03, 18 November 2026).** These fill blanks the founder delegated. Every number is a configurable default.
+
+- **SMS goes through an encrypted queue.** The sign-in request writes the code, sealed with AES-256-GCM, to a queue table in the same transaction as the challenge; the worker sends it through a chain of two providers and deletes the plain text once sent. Rule 3 (nothing is sent from inside a request) holds, and the code is never stored in plain text. Why: a lost SMS must not be lost silently, and a provider outage must fail over. Cost if wrong: sign-in code delivery is delayed by up to the worker's polling interval (about a quarter of a second).
+- **Session and limit numbers** are the tables in section 7. Team members' sessions last 12 hours because their accounts can see identity documents. Why: a stolen laptop should not hold a long-lived admin session. Cost if wrong: team members sign in more often.
+- **Identity documents.** Accepted: JPEG, PNG or WebP up to 8 MB. Every image is re-encoded to JPEG with all metadata (including GPS) removed, and encrypted with a per-file key. Files are deleted 7 days after the decision, 30 days after the last activity on an application nobody decided, 1 hour after an upload that never completed, and at once when replaced. Guarantor and payout details of a rejected or abandoned application are cleared after 30 days. No form asks for an ID number. Cost if wrong: a dispute after deletion can only show that a check happened.
+- **Agencies are run by the Oregano team.** The team creates an agency and gives its code to the agency; riders choose "agency" and enter the code. Staff riders join by an invite from their restaurant's owner. No fifth app is needed. Cost if wrong: an agency manager cannot see its own riders until a later plan adds a view.
+- **Team roles** are `superadmin`, `onboarding` and `support`. They are granted only by an operator command, never through the API. Cost if wrong: granting a role needs someone with server access.
+- **A suspended rider** is taken off offers at once; orders they have not picked up return to the offer pool; an order they already hold they may still deliver (this is the rule above, now built).
+- **At most 3 open orders per customer.** Why: a signed-in account could otherwise flood a restaurant with real cash orders. Cost if wrong: a group ordering for several people may hit the cap; raise it in one place.
+- **Deployment constraint (Plan 11).** The web apps and the API must be same-site, for example `oregano.com.bd` and `api.oregano.com.bd`, or the Strict refresh cookie is never sent.
