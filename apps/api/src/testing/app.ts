@@ -66,7 +66,7 @@ export function withTestApp(options: { devOtpPeek?: boolean; realtime?: boolean 
       const normalised = normalizeBdPhone(phone);
       if (!normalised) throw new Error(`Not a valid phone: ${phone}`);
       const requested = await app().inject({ method: 'POST', url: '/v1/auth/otp/request', payload: { phone } });
-      if (requested.statusCode !== 200) throw new Error(`OTP request failed: ${requested.body}`);
+      if (requested.statusCode !== 202) throw new Error(`OTP request failed: ${requested.body}`);
       const code = otp.last(normalised);
       const verified = await app().inject({ method: 'POST', url: '/v1/auth/otp/verify', payload: { phone, code } });
       if (verified.statusCode !== 200) throw new Error(`OTP verify failed: ${verified.body}`);
