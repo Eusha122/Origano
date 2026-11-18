@@ -11,7 +11,7 @@ import type { Order } from '@oregano/contracts';
 import { poisha, READY_MINUTES, REJECT_REASONS, type ReadyMinutes, type RejectReason } from '@oregano/domain';
 import { formatMoney, t } from '@oregano/i18n';
 import { colors, layout } from '@oregano/ui';
-import { Body, Button, Heading, Screen, useLocale } from '@oregano/ui-native';
+import { Body, Button, Heading, LanguageButton, Screen, useLocale } from '@oregano/ui-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ErrorState } from './components';
@@ -46,6 +46,7 @@ export function OrdersScreen() {
   return (
     <Screen scroll>
       <Heading>{t(locale, 'restaurant.title')}</Heading>
+      <LanguageButton />
       <View style={styles.tabs}>
         {TABS.map((entry) => (
           <View key={entry.status} style={styles.tab}>

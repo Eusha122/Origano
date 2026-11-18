@@ -1,7 +1,7 @@
 import { queryKeys, useApi, useQuery } from '@oregano/app-core';
-import type { RestaurantDetail } from '@oregano/contracts';
+import { MAX_LINE_QUANTITY, type RestaurantDetail } from '@oregano/contracts';
 import { poisha } from '@oregano/domain';
-import { formatMoney, t } from '@oregano/i18n';
+import { formatMoney, t, toBanglaDigits } from '@oregano/i18n';
 import { layout } from '@oregano/ui';
 import { Body, Button, Heading, Screen, useLocale } from '@oregano/ui-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -80,6 +80,7 @@ export default function RestaurantPage() {
                         <>
                           <Button
                             label={`${t(locale, 'cart.add')} ${name}`}
+                            disabled={cart.isAtMax(item.id)}
                             onPress={() =>
                               addItem({
                                 menuItemId: item.id,
@@ -92,6 +93,14 @@ export default function RestaurantPage() {
                           {inCart > 0 ? (
                             <>
                               <Body muted>{quantityLine(inCart, name)}</Body>
+                              {cart.isAtMax(item.id) ? (
+                                <Body muted>
+                                  {t(locale, 'cart.maxReached', {
+                                    max:
+                                      locale === 'bn' ? toBanglaDigits(String(MAX_LINE_QUANTITY)) : MAX_LINE_QUANTITY,
+                                  })}
+                                </Body>
+                              ) : null}
                               <Button
                                 label={`${t(locale, 'cart.remove')} ${name}`}
                                 variant="secondary"
@@ -113,7 +122,11 @@ export default function RestaurantPage() {
       </ScrollView>
       {cart.count > 0 ? (
         <Button
-          label={t(locale, 'cart.viewCart', { count: cart.count, total: formatMoney(cart.subtotal, locale) })}
+          label={
+            cart.count === 1
+              ? t(locale, 'cart.viewCartOne', { total: formatMoney(cart.subtotal, locale) })
+              : t(locale, 'cart.viewCart', { count: cart.count, total: formatMoney(cart.subtotal, locale) })
+          }
           onPress={() => router.push('/checkout')}
         />
       ) : null}

@@ -1,21 +1,8 @@
 import type { OrderStatus } from '@oregano/domain';
-import { type Locale, type MessageKey, t } from '@oregano/i18n';
+import { type Locale, orderStatusKey, t } from '@oregano/i18n';
 import { type ColorName, colors, layout, typeScale } from '@oregano/ui';
 import { StyleSheet, Text, View } from 'react-native';
 import { bodyFont } from './typography';
-
-const LABELS: Record<OrderStatus, MessageKey> = {
-  placed: 'order.placed',
-  preparing: 'order.preparing',
-  ready: 'order.ready',
-  on_the_way: 'order.onTheWay',
-  delivered: 'order.delivered',
-  rejected: 'order.rejected',
-  cancelled: 'order.cancelled',
-  // Plan 02 never produces these two; until they get their own words they read as the nearest outcome.
-  expired: 'order.rejected',
-  undeliverable: 'order.cancelled',
-};
 
 const DOTS: Record<OrderStatus, ColorName> = {
   placed: 'champagne',
@@ -33,12 +20,17 @@ const DOTS: Record<OrderStatus, ColorName> = {
 const DOT = typeScale.caption.size / 2;
 
 /** An order's status as a coloured dot plus words; the words carry the meaning, never the colour alone. */
-export function StatusLine(props: { status: OrderStatus; locale: Locale }) {
+export function StatusLine(props: {
+  status: OrderStatus;
+  locale: Locale;
+  audience: 'customer' | 'rider';
+  hasRider: boolean;
+}) {
   return (
     <View style={styles.row}>
       <View aria-hidden style={[styles.dot, { backgroundColor: colors[DOTS[props.status]] }]} />
       <Text style={[styles.label, { fontFamily: bodyFont(props.locale, true) }]}>
-        {t(props.locale, LABELS[props.status])}
+        {t(props.locale, orderStatusKey(props.status, props.audience, props.hasRider))}
       </Text>
     </View>
   );

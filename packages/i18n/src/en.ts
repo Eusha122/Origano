@@ -77,6 +77,23 @@ export const en = {
   'rider.ridersOnly': 'This app is for approved Oregano riders.',
   'rider.distance': '{km} km away',
   'rider.deliverTo': 'Deliver to',
+  'cart.viewCartOne': '1 item · {total} — View cart',
+  'cart.maxReached': 'You can order up to {max} of one item',
+  'checkout.mayBePlaced': 'This order may already be placed.',
+  'checkout.seeOrder': 'See your order',
+  'error.restaurantClosed': 'This restaurant is closed right now. Try again later.',
+  'error.itemNotInRestaurant': 'Something in your cart is no longer on the menu. Remove it and try again.',
+  'error.validationFailed': 'Some details are missing or wrong. Check them and try again.',
+  'order.readyWaiting': 'Ready. Waiting for a rider.',
+  'riderStatus.placed': 'Waiting for the restaurant',
+  'riderStatus.preparing': 'The restaurant is preparing it',
+  'riderStatus.ready': 'Ready. Collect it from the restaurant.',
+  'riderStatus.onTheWay': 'On the way to the customer',
+  'riderStatus.delivered': 'Delivered',
+  'riderStatus.rejected': 'The restaurant declined this order',
+  'riderStatus.cancelled': 'Order cancelled',
+  'riderStatus.expired': 'Order expired',
+  'riderStatus.undeliverable': 'Could not be delivered',
 } as const;
 
 export type MessageKey = keyof typeof en;

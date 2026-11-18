@@ -1,6 +1,6 @@
 import { queryKeys, useQueryClient, useSession } from '@oregano/app-core';
 import { t } from '@oregano/i18n';
-import { Body, Button, Heading, Screen, useLocale } from '@oregano/ui-native';
+import { Body, Button, Heading, LanguageButton, Screen, useLocale } from '@oregano/ui-native';
 import { ErrorState } from '../components';
 import { OrdersScreen } from '../orders';
 import { SignIn } from '../sign-in';
@@ -28,6 +28,7 @@ export default function Index() {
     return (
       <Screen>
         <Heading>{t(locale, 'restaurant.title')}</Heading>
+        <LanguageButton />
         <Body large>{t(locale, 'restaurant.staffOnly')}</Body>
         <Button label={t(locale, 'auth.signOut')} variant="secondary" onPress={() => void session.signOut()} />
       </Screen>

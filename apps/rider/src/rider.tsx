@@ -12,7 +12,7 @@ import type { Order, RiderOffer } from '@oregano/contracts';
 import { isTerminal, poisha } from '@oregano/domain';
 import { formatMoney, type Locale, t, toBanglaDigits } from '@oregano/i18n';
 import { colors, layout } from '@oregano/ui';
-import { Body, Button, Heading, Screen, StatusLine, useLocale } from '@oregano/ui-native';
+import { Body, Button, Heading, LanguageButton, Screen, StatusLine, useLocale } from '@oregano/ui-native';
 import { Linking, StyleSheet, View } from 'react-native';
 import { ErrorState } from './components';
 
@@ -29,6 +29,7 @@ export function RidersOnly() {
   return (
     <Screen>
       <Heading>{t(locale, 'rider.title')}</Heading>
+      <LanguageButton />
       <Body large>{t(locale, 'rider.ridersOnly')}</Body>
       <Button label={t(locale, 'auth.signOut')} variant="secondary" onPress={() => void session.signOut()} />
     </Screen>
@@ -60,6 +61,7 @@ export function RiderScreen(props: { isOnline: boolean }) {
   return (
     <Screen scroll>
       <Heading>{t(locale, 'rider.title')}</Heading>
+      <LanguageButton />
       <Button
         label={t(locale, props.isOnline ? 'rider.goOffline' : 'rider.goOnline')}
         variant={props.isOnline ? 'secondary' : 'primary'}
@@ -166,7 +168,7 @@ function HeldOrder(props: { order: Order }) {
   return (
     <View style={styles.card}>
       <Heading level={2}>{locale === 'bn' ? order.restaurant.nameBn : order.restaurant.nameEn}</Heading>
-      <StatusLine status={order.status} locale={locale} />
+      <StatusLine status={order.status} locale={locale} audience="rider" hasRider />
       <Body large strong>
         {t(locale, 'rider.deliverTo')}
       </Body>

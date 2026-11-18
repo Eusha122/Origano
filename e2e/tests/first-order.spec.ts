@@ -1,58 +1,24 @@
 import { randomUUID } from 'node:crypto';
+import { expect, type Request as PlaywrightRequest, test } from '@playwright/test';
 import {
-  type APIRequestContext,
-  type Browser,
-  type BrowserContext,
-  expect,
-  type Page,
-  type Request as PlaywrightRequest,
-  test,
-} from '@playwright/test';
-import { API_URL, APP_URLS, adminOrders, bearer, PHONES, signInWithApi, signInWithForm } from '../journey';
+  API_URL,
+  APP_URLS,
+  adminOrders,
+  bearer,
+  closeApps,
+  coldCoffeeOrder,
+  customerToCheckout,
+  openApp,
+  orderNumber,
+  PHONES,
+  signInWithApi,
+  signInWithForm,
+} from '../journey';
 
 /** Live updates must arrive through the realtime hint: the 15-second poll alone would miss this. */
 const LIVE = { timeout: 5000 };
 
-const contexts: BrowserContext[] = [];
-
-test.afterEach(async () => {
-  await Promise.all(contexts.splice(0).map((context) => context.close()));
-});
-
-/** One browser context per person, so each keeps its own session, as on separate phones. */
-async function openApp(browser: Browser, url: string): Promise<Page> {
-  const context = await browser.newContext();
-  contexts.push(context);
-  const page = await context.newPage();
-  await page.goto(url);
-  return page;
-}
-
-/** Customer: puts food in the cart, signs in when checkout asks, fills the address and lands on checkout. */
-async function customerToCheckout(
-  page: Page,
-  request: APIRequestContext,
-  items: { add: string; times: number; cart: RegExp },
-): Promise<void> {
-  await page.getByRole('link', { name: 'Burger Lane' }).click();
-  const add = page.getByRole('button', { name: `Add ${items.add}`, exact: true });
-  for (let i = 0; i < items.times; i++) await add.click();
-  await page.getByRole('button', { name: items.cart }).click();
-
-  // Signing in happens only at checkout, and returns there.
-  await signInWithForm(page, request, PHONES.customer);
-  await page.getByRole('textbox', { name: 'Address' }).fill('Court Road');
-  await page.getByRole('textbox', { name: 'Landmark' }).fill('Behind the college gate');
-  await expect(page.getByRole('textbox', { name: 'Phone number' })).toHaveValue('+8801711000001');
-}
-
-/** Reads the order number from the tracking screen's "Order #12" heading. */
-async function orderNumber(page: Page): Promise<number> {
-  const heading = page.getByRole('heading', { name: /^Order #\d+$/ });
-  await expect(heading).toHaveCount(1);
-  const text = (await heading.textContent()) ?? '';
-  return Number(text.replace('Order #', ''));
-}
+test.afterEach(closeApps);
 
 test('an order goes from the customer to the rider and is delivered, live everywhere', async ({ browser, request }) => {
   // Customer places 2 × Beef Cheese Burger: Tk 760 of food plus the Tk 20 town-centre delivery fee.
@@ -81,12 +47,15 @@ test('an order goes from the customer to the rider and is delivered, live everyw
   await rider.getByRole('button', { name: 'Accept', exact: true }).click();
   const pickedUp = rider.getByRole('button', { name: 'Picked up', exact: true });
   await expect(pickedUp).toBeDisabled();
+  // The rider reads the status in a rider's words, not the customer's.
+  await expect(rider.getByText('The restaurant is preparing it', { exact: true })).toBeVisible();
 
   // Restaurant marks it ready; the rider's Picked up button wakes up live.
   await restaurant.getByRole('button', { name: /^Preparing \d+$/ }).click();
   await restaurant.getByRole('button', { name: 'Mark as ready', exact: true }).click();
   await expect(customer.getByText('Ready. Your rider is collecting it.', { exact: true })).toBeVisible(LIVE);
   await expect(pickedUp).toBeEnabled(LIVE);
+  await expect(rider.getByText('Ready. Collect it from the restaurant.', { exact: true })).toBeVisible();
 
   await pickedUp.click();
   await expect(customer.getByText('On the way', { exact: true })).toBeVisible(LIVE);
@@ -113,7 +82,7 @@ test('double-tapping Place order creates one order', async ({ browser, request }
   };
 
   const customer = await openApp(browser, APP_URLS.customer);
-  await customerToCheckout(customer, request, { add: 'Cold Coffee', times: 1, cart: /^1 items · Tk 180/ });
+  await customerToCheckout(customer, request, { add: 'Cold Coffee', times: 1, cart: /^1 item · Tk 180/ });
 
   // Every place-order request the page sends, whatever the button does with the second tap.
   const posts: PlaywrightRequest[] = [];
@@ -161,26 +130,7 @@ test('a retried place-order request returns the same order', async ({ request })
   const before = await adminOrders(request, adminToken);
 
   const token = await signInWithApi(request, PHONES.customer);
-  const menu = await request.get(`${API_URL}/v1/restaurants/burger-lane`);
-  expect(menu.ok()).toBe(true);
-  const restaurant = (await menu.json()) as {
-    id: string;
-    categories: { items: { id: string; nameEn: string }[] }[];
-  };
-  const coffee = restaurant.categories.flatMap((c) => c.items).find((item) => item.nameEn === 'Cold Coffee');
-  if (!coffee) throw new Error('The demo menu has no Cold Coffee');
-
-  const body = {
-    restaurantId: restaurant.id,
-    items: [{ menuItemId: coffee.id, quantity: 1 }],
-    delivery: {
-      lat: 24.5965,
-      lng: 88.2775,
-      addressLine: 'Court Road',
-      landmark: 'Behind the college gate',
-      phone: PHONES.customer,
-    },
-  };
+  const body = await coldCoffeeOrder(request);
   const headers = { ...bearer(token), 'idempotency-key': randomUUID() };
   const first = await request.post(`${API_URL}/v1/orders`, { data: body, headers });
   const retry = await request.post(`${API_URL}/v1/orders`, { data: body, headers });

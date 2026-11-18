@@ -4,15 +4,17 @@ test('shows the brand promise and switches language', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: "Your town's food, in one place." })).toBeVisible();
-  await expect(page.getByText('Tk 280')).toBeVisible();
+  // No stray sample price: the home screen shows only real restaurants.
+  await expect(page.getByRole('link', { name: 'Burger Lane' })).toBeVisible();
+  await expect(page.getByText('Tk 280')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'বাংলা' }).click();
 
   await expect(page.getByRole('heading', { name: 'শহরের সব খাবার, এক ঠিকানায়।' })).toBeVisible();
-  await expect(page.getByText('৳২৮০')).toBeVisible();
+  await expect(page.getByText('৳২৮০')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'English' }).click();
-  await expect(page.getByText('Tk 280')).toBeVisible();
+  await expect(page.getByRole('heading', { name: "Your town's food, in one place." })).toBeVisible();
 });
 
 test('language button meets the minimum tap target', async ({ page }) => {

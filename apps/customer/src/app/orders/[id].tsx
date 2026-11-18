@@ -31,7 +31,7 @@ export default function OrderTracking() {
       {data ? (
         <>
           <Heading>{t(locale, 'order.number', { number: data.number })}</Heading>
-          <StatusLine status={data.status} locale={locale} />
+          <StatusLine status={data.status} locale={locale} audience="customer" hasRider={data.rider !== null} />
           <Body strong>{pick(locale, data.restaurant.nameEn, data.restaurant.nameBn)}</Body>
           {data.items.map((item) => (
             <View key={item.menuItemId} style={styles.row}>

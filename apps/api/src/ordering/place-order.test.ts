@@ -157,11 +157,16 @@ describe('placing an order', () => {
     expect(await count('outbox')).toBe(0);
   });
 
-  it('refuses a zero quantity and an empty order', async () => {
+  it('refuses a zero quantity, more than 20 of one item and an empty order', async () => {
     const token = await t.signIn(CUSTOMER);
     const { menuItemIds } = t.demo();
-    for (const items of [[], [{ menuItemId: menuItemIds.coldCoffee, quantity: 0 }]]) {
-      const res = await place(token, orderBody({ items }), `key-${items.length}-invalid`);
+    const invalid = [
+      [],
+      [{ menuItemId: menuItemIds.coldCoffee, quantity: 0 }],
+      [{ menuItemId: menuItemIds.coldCoffee, quantity: 21 }],
+    ];
+    for (const [index, items] of invalid.entries()) {
+      const res = await place(token, orderBody({ items }), `key-${index}-invalid`);
       expect(res.statusCode).toBe(400);
       expect(res.json().error.code).toBe('validation_failed');
     }

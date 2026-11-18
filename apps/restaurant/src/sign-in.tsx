@@ -1,6 +1,6 @@
 import { useApi, useMutation, useSession } from '@oregano/app-core';
 import { t } from '@oregano/i18n';
-import { Body, Button, Heading, Screen, TextField, useLocale } from '@oregano/ui-native';
+import { Body, Button, Heading, LanguageButton, Screen, TextField, useLocale } from '@oregano/ui-native';
 import { useState } from 'react';
 import { errorKey } from './components';
 
@@ -25,6 +25,7 @@ export function SignIn() {
   return (
     <Screen scroll>
       <Heading>{t(locale, 'restaurant.title')}</Heading>
+      <LanguageButton />
       <TextField
         label={t(locale, 'auth.phoneLabel')}
         value={phone}

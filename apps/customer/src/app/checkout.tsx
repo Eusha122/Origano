@@ -1,13 +1,5 @@
-import {
-  newIdempotencyKey,
-  queryKeys,
-  useApi,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSession,
-} from '@oregano/app-core';
-import { addMoney, poisha } from '@oregano/domain';
+import { ApiError, queryKeys, useApi, useMutation, useQuery, useQueryClient, useSession } from '@oregano/app-core';
+import { addMoney, isTerminal, poisha } from '@oregano/domain';
 import { formatMoney, t } from '@oregano/i18n';
 import { layout } from '@oregano/ui';
 import { Body, Button, Heading, Screen, TextField, useLocale } from '@oregano/ui-native';
@@ -26,8 +18,6 @@ export default function Checkout() {
   const session = useSession();
   const cart = useCart();
 
-  // One key for this visit to the screen: every tap and retry of the same attempt reuses it.
-  const [idempotencyKey] = useState(newIdempotencyKey);
   const [address, setAddress] = useState('');
   const [landmark, setLandmark] = useState('');
   const [phoneEdit, setPhoneEdit] = useState<string | null>(null);
@@ -68,7 +58,7 @@ export default function Checkout() {
           },
           ...(trimmedNote === '' ? {} : { note: trimmedNote }),
         },
-        idempotencyKey,
+        cart.idempotencyKey,
       );
     },
     onSuccess: (order) => {
@@ -78,6 +68,20 @@ export default function Checkout() {
       cart.clear();
     },
   });
+
+  // The answer to an earlier tap may have been lost on the way back, so the order may exist: lead to it.
+  const seeOrder = useMutation({
+    mutationFn: () => api.myOrders(),
+    onSuccess: (orders) => {
+      const newest = orders.filter((o) => !isTerminal(o.status)).sort((a, b) => b.number - a.number)[0];
+      if (newest) {
+        queryClient.setQueryData(queryKeys.order(newest.id), newest);
+        router.replace(`/orders/${newest.id}`);
+        cart.clear();
+      }
+    },
+  });
+  const mayBePlaced = place.error instanceof ApiError && place.error.code === 'idempotency_key_reused';
 
   const required = t(locale, 'checkout.requiredField');
   const addressError = submitted && address.trim() === '' ? required : null;
@@ -151,6 +155,14 @@ export default function Checkout() {
         <View role="alert">
           <Body>{t(locale, errorKey(place.error))}</Body>
         </View>
+      ) : null}
+      {mayBePlaced ? (
+        <Button
+          label={t(locale, 'checkout.seeOrder')}
+          variant="secondary"
+          busy={seeOrder.isPending}
+          onPress={() => seeOrder.mutate()}
+        />
       ) : null}
       <Button
         label={

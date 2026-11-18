@@ -3,10 +3,13 @@ import { z } from 'zod';
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 
+/** The most of one item a single order may hold; the cart stops here and the API refuses more. */
+export const MAX_LINE_QUANTITY = 20;
+
 export const PlaceOrderBody = z.object({
   restaurantId: z.uuid(),
   items: z
-    .array(z.object({ menuItemId: z.uuid(), quantity: z.number().int().min(1).max(20) }))
+    .array(z.object({ menuItemId: z.uuid(), quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY) }))
     .min(1)
     .max(30)
     .refine((items) => new Set(items.map((i) => i.menuItemId)).size === items.length, {

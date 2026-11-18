@@ -18,6 +18,14 @@ export function errorKey(error: unknown): MessageKey {
       return 'auth.wrongCode';
     case 'outside_zone':
       return 'zone.outside';
+    case 'idempotency_key_reused':
+      return 'checkout.mayBePlaced';
+    case 'restaurant_closed':
+      return 'error.restaurantClosed';
+    case 'item_not_in_restaurant':
+      return 'error.itemNotInRestaurant';
+    case 'validation_failed':
+      return 'error.validationFailed';
     case 'item_unavailable':
       return 'item.soldOut';
     default:
