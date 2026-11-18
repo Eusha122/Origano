@@ -6,9 +6,13 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ApplyScreen } from '../apply';
 import { ErrorState } from '../components';
+import { DiscountsScreen } from '../discounts';
+import { HoursScreen } from '../hours';
+import { MenuScreen } from '../menu/menu-screen';
 import { OrdersScreen } from '../orders';
 import { SignIn } from '../sign-in';
 import { StaffScreen } from '../staff';
+import { TodayScreen } from '../today-controls';
 
 /** Sign in, then either the orders (with Staff for an owner) or the application to join Oregano. */
 export default function Index() {
@@ -33,33 +37,54 @@ export default function Index() {
   return <ApplyScreen />;
 }
 
-/** The working app. The owner gets a second tab for staff; for anyone else the staff page would only say no. */
+type Tab = 'orders' | 'today' | 'menu' | 'hours' | 'discounts' | 'staff';
+
+/** The working app: orders and today for everyone on staff; the owner also gets the Staff tab. */
 function RestaurantHome(props: { restaurantId: string }) {
   const { locale } = useLocale();
   const api = useApi();
-  const [tab, setTab] = useState<'orders' | 'staff'>('orders');
-  // Only an owner may read the staff list, so a refusal means this person gets no Staff tab.
+  const [tab, setTab] = useState<Tab>('orders');
+  // Only an owner may read the staff list, so a refusal means this person gets no owner tabs.
   const owner = useQuery({
     queryKey: queryKeys.staff(props.restaurantId),
     queryFn: () => api.staff(props.restaurantId),
     retry: false,
   });
-  const tabs = owner.isSuccess ? (
+  const entries: { id: Tab; label: string }[] = [
+    { id: 'orders', label: t(locale, 'staff.ordersTab') },
+    { id: 'today', label: t(locale, 'tabs.today') },
+    { id: 'menu', label: t(locale, 'menu.title') },
+    ...(owner.isSuccess
+      ? [
+          { id: 'hours' as const, label: t(locale, 'tabs.hours') },
+          { id: 'discounts' as const, label: t(locale, 'tabs.discounts') },
+          { id: 'staff' as const, label: t(locale, 'staff.title') },
+        ]
+      : []),
+  ];
+  const tabs = (
     <View style={styles.tabs}>
-      <View style={styles.tab}>
-        <Button label={t(locale, 'staff.ordersTab')} selected={tab === 'orders'} onPress={() => setTab('orders')} />
-      </View>
-      <View style={styles.tab}>
-        <Button label={t(locale, 'staff.title')} selected={tab === 'staff'} onPress={() => setTab('staff')} />
-      </View>
+      {entries.map((entry) => (
+        <View key={entry.id} style={styles.tab}>
+          <Button label={entry.label} selected={tab === entry.id} onPress={() => setTab(entry.id)} />
+        </View>
+      ))}
     </View>
-  ) : null;
+  );
 
   if (tab === 'staff' && owner.isSuccess) return <StaffScreen restaurantId={props.restaurantId} header={tabs} />;
+  if (tab === 'hours' && owner.isSuccess) return <HoursScreen restaurantId={props.restaurantId} header={tabs} />;
+  if (tab === 'discounts' && owner.isSuccess) {
+    return <DiscountsScreen restaurantId={props.restaurantId} header={tabs} />;
+  }
+  if (tab === 'menu') {
+    return <MenuScreen restaurantId={props.restaurantId} isOwner={owner.isSuccess} header={tabs} />;
+  }
+  if (tab === 'today') return <TodayScreen restaurantId={props.restaurantId} header={tabs} />;
   return <OrdersScreen header={tabs} />;
 }
 
 const styles = StyleSheet.create({
-  tabs: { flexDirection: 'row', gap: layout.screenMargin / 2 },
-  tab: { flex: 1 },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: layout.screenMargin / 2 },
+  tab: { flexGrow: 1, flexBasis: 120 },
 });

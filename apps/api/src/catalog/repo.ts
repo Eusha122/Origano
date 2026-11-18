@@ -1,6 +1,8 @@
-import { type Money, poisha } from '@oregano/domain';
+import { type Money, type OpeningInterval, poisha } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { Db, Executor } from '../db/client';
+import { insertDefaultHours, loadIntervals } from './hours-repo';
+import { restaurantState } from './state';
 
 type Point = { lat: number; lng: number };
 
@@ -15,6 +17,10 @@ export type RestaurantRow = {
   isOpen: boolean;
   prepMinutes: number;
   zoneId: string;
+  timezone: string;
+  busyExtraMinutes: number;
+  coverImageKey: string | null;
+  intervals: OpeningInterval[];
   /** Straight-line meters from the given point; null when no point was given. */
   distanceMeters: number | null;
 };
@@ -30,6 +36,9 @@ type RestaurantDbRow = {
   is_open: boolean;
   prep_minutes: number;
   zone_id: string;
+  timezone: string;
+  busy_extra_minutes: number;
+  cover_image_key: string | null;
   distance_m: number | null;
 };
 
@@ -45,6 +54,10 @@ function toRestaurantRow(r: RestaurantDbRow): RestaurantRow {
     isOpen: r.is_open,
     prepMinutes: r.prep_minutes,
     zoneId: r.zone_id,
+    timezone: r.timezone,
+    busyExtraMinutes: r.busy_extra_minutes,
+    coverImageKey: r.cover_image_key,
+    intervals: [],
     distanceMeters: r.distance_m === null ? null : Number(r.distance_m),
   };
 }
@@ -55,74 +68,67 @@ function distanceColumn(point: Point | undefined) {
     : sql`NULL`;
 }
 
+async function withIntervals(db: Db, rows: RestaurantRow[]): Promise<RestaurantRow[]> {
+  const intervals = await loadIntervals(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((r) => ({ ...r, intervals: intervals.get(r.id) ?? [] }));
+}
+
+/** The customer-facing open state, opening time and prep time of a listed restaurant at `now`. */
+export function stateOf(r: RestaurantRow, now: Date) {
+  return restaurantState(
+    {
+      switchOn: r.isOpen,
+      timezone: r.timezone,
+      intervals: r.intervals,
+      prepMinutes: r.prepMinutes,
+      busyExtraMinutes: r.busyExtraMinutes,
+    },
+    now,
+  );
+}
+
 /** Open restaurants first, then closed, each by name. `zoneId` limits to one zone; otherwise every active zone. */
 export async function listRestaurants(db: Db, opts: { zoneId?: string; point?: Point }): Promise<RestaurantRow[]> {
   const zoneFilter = opts.zoneId ? sql`r.zone_id = ${opts.zoneId}` : sql`z.is_active`;
   const rows = await db.execute<RestaurantDbRow>(sql`
     SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
-      r.is_open, r.prep_minutes, r.zone_id, ${distanceColumn(opts.point)} AS distance_m
+      r.is_open, r.prep_minutes, r.zone_id, z.timezone, r.busy_extra_minutes, r.cover_image_key,
+      ${distanceColumn(opts.point)} AS distance_m
     FROM restaurants r JOIN zones z ON z.id = r.zone_id
     WHERE ${zoneFilter} AND r.status = 'approved'
     ORDER BY r.is_open DESC, r.name_en ASC`);
-  return rows.map(toRestaurantRow);
+  return withIntervals(db, rows.map(toRestaurantRow));
+}
+
+/** The approved restaurants with these ids, in the order of `ids`. */
+export async function listRestaurantsByIds(db: Db, ids: string[], point?: Point): Promise<RestaurantRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await db.execute<RestaurantDbRow>(sql`
+    SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
+      r.is_open, r.prep_minutes, r.zone_id, z.timezone, r.busy_extra_minutes, r.cover_image_key,
+      ${distanceColumn(point)} AS distance_m
+    FROM restaurants r JOIN zones z ON z.id = r.zone_id
+    WHERE r.status = 'approved' AND r.id IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})`);
+  const byId = new Map((await withIntervals(db, rows.map(toRestaurantRow))).map((r) => [r.id, r]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
 }
 
 export async function findRestaurantBySlug(db: Db, slug: string, point?: Point): Promise<RestaurantRow | null> {
   const rows = await db.execute<RestaurantDbRow>(sql`
     SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
-      r.is_open, r.prep_minutes, r.zone_id, ${distanceColumn(point)} AS distance_m
-    FROM restaurants r WHERE r.slug = ${slug} AND r.status = 'approved'`);
+      r.is_open, r.prep_minutes, r.zone_id, z.timezone, r.busy_extra_minutes, r.cover_image_key,
+      ${distanceColumn(point)} AS distance_m
+    FROM restaurants r JOIN zones z ON z.id = r.zone_id WHERE r.slug = ${slug} AND r.status = 'approved'`);
   const row = rows[0];
-  return row ? toRestaurantRow(row) : null;
-}
-
-export type MenuCategoryRow = {
-  id: string;
-  nameEn: string;
-  nameBn: string;
-  items: {
-    id: string;
-    nameEn: string;
-    nameBn: string;
-    descriptionEn: string | null;
-    descriptionBn: string | null;
-    price: Money;
-    isAvailable: boolean;
-  }[];
-};
-
-/** Categories in position order, each with its items in position order. Empty categories are kept. */
-export async function getMenu(db: Db, restaurantId: string): Promise<MenuCategoryRow[]> {
-  const categories = await db.execute<{ id: string; name_en: string; name_bn: string }>(sql`
-    SELECT id, name_en, name_bn FROM menu_categories WHERE restaurant_id = ${restaurantId} ORDER BY position, name_en`);
-  const items = await db.execute<{
-    id: string;
-    category_id: string;
-    name_en: string;
-    name_bn: string;
-    description_en: string | null;
-    description_bn: string | null;
-    price_poisha: number;
-    is_available: boolean;
-  }>(sql`
-    SELECT id, category_id, name_en, name_bn, description_en, description_bn, price_poisha, is_available
-    FROM menu_items WHERE restaurant_id = ${restaurantId} ORDER BY position, name_en`);
-  return categories.map((c) => ({
-    id: c.id,
-    nameEn: c.name_en,
-    nameBn: c.name_bn,
-    items: items
-      .filter((i) => i.category_id === c.id)
-      .map((i) => ({
-        id: i.id,
-        nameEn: i.name_en,
-        nameBn: i.name_bn,
-        descriptionEn: i.description_en,
-        descriptionBn: i.description_bn,
-        price: poisha(i.price_poisha),
-        isAvailable: i.is_available,
-      })),
-  }));
+  if (!row) return null;
+  const [restaurant] = await withIntervals(db, [toRestaurantRow(row)]);
+  return restaurant ?? null;
 }
 
 export type RestaurantForOrder = {
@@ -136,7 +142,11 @@ export type RestaurantForOrder = {
   location: { lat: number; lng: number };
 };
 
-export async function getRestaurantForOrder(db: Executor, id: string): Promise<RestaurantForOrder | null> {
+export async function getRestaurantForOrder(
+  db: Executor,
+  id: string,
+  now: Date = new Date(),
+): Promise<RestaurantForOrder | null> {
   const rows = await db.execute<{
     id: string;
     zone_id: string;
@@ -146,16 +156,30 @@ export async function getRestaurantForOrder(db: Executor, id: string): Promise<R
     name_bn: string;
     lat: number;
     lng: number;
+    timezone: string;
+    prep_minutes: number;
+    busy_extra_minutes: number;
   }>(sql`
-    SELECT id, zone_id, is_open, status, name_en, name_bn,
-      ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
-    FROM restaurants WHERE id = ${id}`);
+    SELECT r.id, r.zone_id, r.is_open, r.status, r.name_en, r.name_bn, z.timezone, r.prep_minutes, r.busy_extra_minutes,
+      ST_Y(r.location::geometry) AS lat, ST_X(r.location::geometry) AS lng
+    FROM restaurants r JOIN zones z ON z.id = r.zone_id WHERE r.id = ${id}`);
   const r = rows[0];
   if (!r) return null;
+  const intervals = (await loadIntervals(db, [r.id])).get(r.id) ?? [];
+  const state = restaurantState(
+    {
+      switchOn: r.is_open,
+      timezone: r.timezone,
+      intervals,
+      prepMinutes: r.prep_minutes,
+      busyExtraMinutes: r.busy_extra_minutes,
+    },
+    now,
+  );
   return {
     id: r.id,
     zoneId: r.zone_id,
-    isOpen: r.is_open,
+    isOpen: state.isOpen,
     approved: r.status === 'approved',
     nameEn: r.name_en,
     nameBn: r.name_bn,
@@ -232,7 +256,10 @@ export async function createApprovedRestaurant(
         ST_SetSRID(ST_MakePoint(${r.location.lng}, ${r.location.lat}), 4326)::geography, false, 'approved')
       ON CONFLICT (slug) DO NOTHING RETURNING id`);
     const id = rows[0]?.id;
-    if (id) return { id, slug };
+    if (id) {
+      await insertDefaultHours(tx, id);
+      return { id, slug };
+    }
   }
   throw new Error('No free restaurant slug');
 }

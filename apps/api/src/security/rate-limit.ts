@@ -62,6 +62,13 @@ export async function registerRateLimits(
       byIp,
     ),
     make(
+      'search',
+      limits.searchPerIpMinute,
+      MINUTE,
+      (r) => r.method === 'GET' && route(r).startsWith('/v1/search'),
+      byIp,
+    ),
+    make(
       'refresh',
       limits.refreshPerIpMinute,
       MINUTE,
@@ -83,6 +90,20 @@ export async function registerRateLimits(
       limits.ordersPerUserTenMinutes,
       10 * MINUTE,
       (r) => r.method === 'POST' && route(r) === '/v1/orders',
+      byUser,
+    ),
+    make(
+      'catalog-writes',
+      limits.catalogWritesPerUserHour,
+      60 * MINUTE,
+      (r) => WRITE_METHODS.has(r.method) && route(r).startsWith('/v1/restaurants/'),
+      byUser,
+    ),
+    make(
+      'public-uploads',
+      limits.publicUploadsPerUserHour,
+      60 * MINUTE,
+      (r) => r.method === 'PUT' && route(r).startsWith('/v1/restaurants/') && route(r).endsWith('/photo'),
       byUser,
     ),
     make(

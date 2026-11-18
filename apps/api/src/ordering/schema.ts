@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { menuItems, restaurants } from '../catalog/schema';
 import { geographyPoint } from '../db/geography';
 import { users } from '../identity/schema';
@@ -70,6 +70,11 @@ export const orderItems = pgTable(
     unitPricePoisha: integer('unit_price_poisha').notNull(),
     quantity: integer('quantity').notNull(),
     lineTotalPoisha: integer('line_total_poisha').notNull(),
+    /** Chosen options as priced at the time of the order: [{ nameEn, nameBn, priceDelta }]. */
+    options: jsonb('options').notNull().default(sql`'[]'::jsonb`),
+    note: text('note'),
+    /** Per-unit discount in poisha already taken off unit_price_poisha. */
+    discountPoisha: integer('discount_poisha').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

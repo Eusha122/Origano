@@ -7,6 +7,7 @@ import { allowedTabs, Nav, type TabId } from './Nav';
 import { Orders } from './Orders';
 import { SignIn } from './SignIn';
 import { Team } from './Team';
+import { Zones } from './Zones';
 
 export function App() {
   const session = useSession();
@@ -42,6 +43,7 @@ export function App() {
             {current === 'riders' ? <Riders /> : null}
             {current === 'restaurants' ? <Restaurants /> : null}
             {current === 'agencies' ? <Agencies /> : null}
+            {current === 'zones' ? <Zones /> : null}
             {current === 'team' ? <Team /> : null}
           </>
         ) : session.me ? (

@@ -83,9 +83,12 @@ function OrderCard(props: { order: Order }) {
     <View style={styles.card}>
       <Heading level={2}>{heading}</Heading>
       {order.items.map((item) => (
-        <Body large key={item.menuItemId}>
-          {quantityLine(item.quantity, locale === 'bn' ? item.nameBn : item.nameEn)}
-        </Body>
+        // A line is the item plus its chosen options and note, so the same item can appear twice.
+        <View key={`${item.menuItemId}:${item.options.map((o) => o.nameEn).join('+')}:${item.note ?? ''}`}>
+          <Body large>{quantityLine(item.quantity, locale === 'bn' ? item.nameBn : item.nameEn)}</Body>
+          {item.options.length > 0 ? <Body muted>{item.options.map((o) => o.nameEn).join(', ')}</Body> : null}
+          {item.note ? <Body strong>{item.note}</Body> : null}
+        </View>
       ))}
       {order.note ? (
         <Body large strong>

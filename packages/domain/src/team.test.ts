@@ -33,3 +33,13 @@ describe('vehicleNeedsRegistration', () => {
     }
   });
 });
+
+describe('zones.manage', () => {
+  it('is for the superadmin only', () => {
+    expect(teamCan(['superadmin'], 'zones.manage')).toBe(true);
+    expect(teamCan(['onboarding'], 'zones.manage')).toBe(false);
+    expect(teamCan(['support'], 'zones.manage')).toBe(false);
+    expect(teamCan(['support', 'onboarding'], 'zones.manage')).toBe(false);
+    expect(teamCan([], 'zones.manage')).toBe(false);
+  });
+});

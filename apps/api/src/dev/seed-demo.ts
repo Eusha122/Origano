@@ -121,6 +121,12 @@ export async function seedDemo(db: Db): Promise<DemoIds> {
   );
   const restaurantId = restaurant.id;
 
+  // Open all day, every day, so demo data and browser tests do not depend on the time of day.
+  await db.execute(sql`DELETE FROM restaurant_hours WHERE restaurant_id = ${restaurantId}`);
+  await db.execute(sql`
+    INSERT INTO restaurant_hours (restaurant_id, day_of_week, open_minute, close_minute)
+    SELECT ${restaurantId}, d, 0, 1440 FROM generate_series(0, 6) AS d`);
+
   await db.execute(sql`
     INSERT INTO restaurant_staff (restaurant_id, user_id, role) VALUES (${restaurantId}, ${ownerId}, 'owner')
     ON CONFLICT (restaurant_id, user_id) DO UPDATE SET role = EXCLUDED.role`);

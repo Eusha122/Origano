@@ -5,14 +5,14 @@ export type ImageCheck =
   | { ok: false; code: 'unsupported_document' | 'document_too_large' };
 
 export const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
-const MAX_PIXELS = 40_000_000;
+export const MAX_PIXELS = 40_000_000;
 const MAX_EDGE = 2000;
 /** A 40 megapixel decode takes well over 100 MB, so only a few run at once. */
 const MAX_CONCURRENT = 3;
 
 type Sniffed = 'jpeg' | 'png' | 'webp';
 
-function sniff(b: Buffer): Sniffed | null {
+export function sniff(b: Buffer): Sniffed | null {
   if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpeg';
   if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
     return 'png';
@@ -22,7 +22,7 @@ function sniff(b: Buffer): Sniffed | null {
 
 let running = 0;
 const waiting: Array<() => void> = [];
-async function withSlot<T>(work: () => Promise<T>): Promise<T> {
+export async function withSlot<T>(work: () => Promise<T>): Promise<T> {
   if (running >= MAX_CONCURRENT) await new Promise<void>((resolve) => waiting.push(resolve));
   running += 1;
   try {

@@ -1,18 +1,23 @@
 import type { PlaceOrderBody } from '@oregano/contracts';
 import {
+  addMoney,
+  bestDiscount,
+  checkSelections,
   deliveryFee,
   normalizeBdPhone,
   type OrderActor,
   type OrderEvent,
   type OrderStatus,
   orderTotals,
+  priceLine,
   type ReadyMinutes,
   type RejectReason,
   TERMINAL_STATUSES,
   transition,
 } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
-import { distanceMeters, getMenuItems, getRestaurantForOrder } from '../catalog/repo';
+import { getPricingContext } from '../catalog/pricing-context';
+import { distanceMeters, getRestaurantForOrder } from '../catalog/repo';
 import type { Db, Tx } from '../db/client';
 import { AppError } from '../errors';
 import { writeOrderChanged } from '../events/outbox';
@@ -31,6 +36,18 @@ const EVENT_NAMES: Record<OrderEvent, string> = {
   collect: 'delivered',
   report_undeliverable: 'undeliverable',
 };
+
+function selectionError(
+  reason: 'unknown_option' | 'option_unavailable' | 'required_choice_missing' | 'too_many_choices' | 'duplicate_option',
+): AppError {
+  if (reason === 'option_unavailable') {
+    return new AppError('option_unavailable', 422, 'One of the choices is not available right now.');
+  }
+  if (reason === 'required_choice_missing') {
+    return new AppError('required_choice_missing', 400, 'Pick a choice for each required option.');
+  }
+  return new AppError('invalid_option', 400, 'Something you picked is not offered.');
+}
 
 /** Places an order inside the caller's transaction (see `withIdempotency`). Prices come only from the database. */
 /**
@@ -57,19 +74,21 @@ export async function placeOrderIn(
   customer: AuthUser,
   body: PlaceOrderBody,
   openOrderLimit: number,
+  now: Date = new Date(),
 ): Promise<{ orderId: string }> {
   await assertUnderOpenOrderLimit(tx, customer.id, openOrderLimit);
-  const restaurant = await getRestaurantForOrder(tx, body.restaurantId);
+  const restaurant = await getRestaurantForOrder(tx, body.restaurantId, now);
   if (!restaurant) throw new AppError('not_found', 404, 'Not found.');
   if (!restaurant.approved || !restaurant.isOpen)
     throw new AppError('restaurant_closed', 422, 'This restaurant is closed right now.');
 
   const found = new Map(
     (
-      await getMenuItems(
+      await getPricingContext(
         tx,
         restaurant.id,
         body.items.map((i) => i.menuItemId),
+        now,
       )
     ).map((m) => [m.id, m]),
   );
@@ -78,11 +97,30 @@ export async function placeOrderIn(
     if (!item) {
       throw new AppError('item_not_in_restaurant', 422, "This item is not on this restaurant's menu.");
     }
-    return { item, quantity: line.quantity };
+    return { item, line };
   });
   if (lines.some((l) => !l.item.isAvailable)) {
     throw new AppError('item_unavailable', 422, 'Some items are no longer available.');
   }
+  // Every price comes from the database: base price, chosen options, then the best live discount.
+  const priced = lines.map(({ item, line }) => {
+    const optionIds = line.optionIds ?? [];
+    const selection = checkSelections(item.groups, optionIds);
+    if (!selection.ok) throw selectionError(selection.reason);
+    const { off } = bestDiscount(addMoney(item.price, selection.delta), item.discounts);
+    const allOptions = item.groups.flatMap((g) => g.options);
+    return {
+      item,
+      quantity: line.quantity,
+      note: line.note ?? null,
+      unitPrice: priceLine(item.price, selection.delta, off),
+      discount: off,
+      options: optionIds.map((id) => {
+        const o = allOptions.find((x) => x.id === id);
+        return { nameEn: o?.nameEn ?? '', nameBn: o?.nameBn ?? '', priceDelta: o?.priceDelta ?? 0 };
+      }),
+    };
+  });
 
   const point = { lat: body.delivery.lat, lng: body.delivery.lng };
   const zone = await findZoneForPoint(tx, point);
@@ -94,7 +132,7 @@ export async function placeOrderIn(
 
   const fee = deliveryFee(await distanceMeters(tx, restaurant.location, point), zone);
   const totals = orderTotals(
-    lines.map((l) => ({ unitPrice: l.item.price, quantity: l.quantity })),
+    priced.map((l) => ({ unitPrice: l.unitPrice, quantity: l.quantity })),
     fee,
   );
 
@@ -108,11 +146,12 @@ export async function placeOrderIn(
   const orderId = created[0]?.id;
   if (!orderId) throw new Error('Order insert returned no row');
 
-  for (const l of lines) {
+  for (const l of priced) {
     await tx.execute(sql`
-      INSERT INTO order_items (order_id, menu_item_id, name_en, name_bn, unit_price_poisha, quantity, line_total_poisha)
-      VALUES (${orderId}, ${l.item.id}, ${l.item.nameEn}, ${l.item.nameBn}, ${l.item.price}, ${l.quantity},
-        ${l.item.price * l.quantity})`);
+      INSERT INTO order_items (order_id, menu_item_id, name_en, name_bn, unit_price_poisha, quantity, line_total_poisha,
+        options, note, discount_poisha)
+      VALUES (${orderId}, ${l.item.id}, ${l.item.nameEn}, ${l.item.nameBn}, ${l.unitPrice}, ${l.quantity},
+        ${l.unitPrice * l.quantity}, ${JSON.stringify(l.options)}::jsonb, ${l.note}, ${l.discount})`);
   }
   await tx.execute(sql`
     INSERT INTO order_events (order_id, event, from_status, to_status, actor_type, actor_id)

@@ -46,6 +46,18 @@ const KEYS: Record<ErrorCode, MessageKey> = {
   document_too_large: 'error.documentTooLarge',
   document_deleted: 'error.documentDeleted',
   link_expired: 'error.linkExpired',
+  category_not_empty: 'error.categoryNotEmpty',
+  menu_limit_reached: 'error.menuLimitReached',
+  invalid_menu_data: 'error.invalidMenuData',
+  invalid_hours: 'error.invalidHours',
+  invalid_discount: 'error.invalidDiscount',
+  unsupported_image: 'error.unsupportedImage',
+  image_too_large: 'error.imageTooLarge',
+  invalid_zone: 'error.invalidZone',
+  zone_has_open_orders: 'error.zoneHasOpenOrders',
+  option_unavailable: 'error.optionUnavailable',
+  required_choice_missing: 'error.requiredChoiceMissing',
+  invalid_option: 'error.invalidOption',
   internal: 'error.generic',
 };
 

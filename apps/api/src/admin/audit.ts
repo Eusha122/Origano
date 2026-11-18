@@ -25,7 +25,27 @@ export type AuditAction =
   | 'staff.added'
   | 'staff.removed'
   | 'rider_invite.created'
-  | 'rider_invite.deleted';
+  | 'rider_invite.deleted'
+  | 'restaurant.open_changed'
+  | 'restaurant.busy_changed'
+  | 'restaurant.hours_replaced'
+  | 'restaurant.prep_changed'
+  | 'restaurant.photo_changed'
+  | 'item.availability_changed'
+  | 'menu.category_created'
+  | 'menu.category_updated'
+  | 'menu.category_deleted'
+  | 'menu.categories_reordered'
+  | 'menu.item_created'
+  | 'menu.item_updated'
+  | 'menu.item_archived'
+  | 'menu.item_photo_changed'
+  | 'menu.options_replaced'
+  | 'discount.created'
+  | 'discount.updated'
+  | 'discount.deleted'
+  | 'zone.created'
+  | 'zone.updated';
 
 export type AuditEntry = {
   actor: { type: 'user'; id: string } | { type: 'operator'; label: string } | { type: 'system' };

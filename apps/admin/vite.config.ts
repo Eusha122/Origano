@@ -3,7 +3,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 /**
  * The page may load only its own files, the fonts, and talk to the API. Identity documents are shown from
- * `blob:` URLs, so `img-src` allows them. Built into index.html for production only: the dev server injects
+ * `blob:` URLs, and menu photos and the zone map's tiles come from the API and OpenStreetMap, so `img-src` allows them. Built into index.html for production only: the dev server injects
  * inline scripts for hot reload, which this policy would block.
  * (`frame-ancestors` cannot be set from a meta tag; the host sends it as a header, Plan 11.)
  */
@@ -12,7 +12,7 @@ function contentSecurityPolicy(apiUrl: string): Plugin {
   const ws = `${api.protocol === 'https:' ? 'wss:' : 'ws:'}//${api.host}`;
   const policy = [
     "default-src 'self'",
-    "img-src 'self' blob: data:",
+    `img-src 'self' blob: data: ${api.origin} https://tile.openstreetmap.org`,
     `connect-src 'self' ${api.origin} ${ws}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     'font-src https://fonts.gstatic.com',

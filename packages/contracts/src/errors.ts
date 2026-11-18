@@ -40,6 +40,18 @@ export const ERROR_CODES = [
   'document_too_large',
   'document_deleted',
   'link_expired',
+  'category_not_empty',
+  'menu_limit_reached',
+  'invalid_menu_data',
+  'invalid_hours',
+  'invalid_discount',
+  'unsupported_image',
+  'image_too_large',
+  'invalid_zone',
+  'zone_has_open_orders',
+  'option_unavailable',
+  'required_choice_missing',
+  'invalid_option',
   'internal',
 ] as const;
 

@@ -7,7 +7,13 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
 import { documentRoutes } from './admin/document-routes';
 import { adminRoutes } from './admin/routes';
+import { discountRoutes } from './catalog/discount-routes';
+import { hoursRoutes } from './catalog/hours-routes';
+import { menuRoutes } from './catalog/menu-routes';
+import { photoRoutes } from './catalog/photo-routes';
 import { catalogRoutes } from './catalog/routes';
+import { searchRoutes } from './catalog/search-routes';
+import { catalogStaffRoutes } from './catalog/staff-routes';
 import type { Config } from './config';
 import type { Db } from './db/client';
 import { dispatchRoutes } from './dispatch/routes';
@@ -20,6 +26,7 @@ import { identityRoutes } from './identity/routes';
 import { authenticateAccess } from './identity/sessions';
 import { staffRoutes } from './identity/staff-routes';
 import { MAX_DOCUMENT_BYTES } from './media/image';
+import { publicMediaRoutes } from './media/public-routes';
 import type { ObjectStore } from './media/store';
 import type { SmsDeps } from './notifications/sms/queue';
 import { onboardingRoutes } from './onboarding/routes';
@@ -27,6 +34,7 @@ import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
 import { hashIp, subkey } from './security/crypto';
 import { registerRateLimits } from './security/rate-limit';
+import { zoneAdminRoutes } from './zones/admin-routes';
 import { zoneRoutes } from './zones/routes';
 
 export type { ReadinessCheck } from './health/routes';
@@ -185,6 +193,13 @@ export async function buildApp(deps: {
       async (v1) => {
         identityRoutes(v1, config, services);
         catalogRoutes(v1, services);
+        catalogStaffRoutes(v1, services);
+        menuRoutes(v1, services);
+        hoursRoutes(v1, services);
+        discountRoutes(v1, services);
+        photoRoutes(v1, services);
+        searchRoutes(v1, services);
+        publicMediaRoutes(v1, services);
         orderRoutes(v1, config, services);
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);
@@ -193,6 +208,7 @@ export async function buildApp(deps: {
         onboardingRoutes(v1, config, services);
         staffRoutes(v1, config, services);
         zoneRoutes(v1, services);
+        zoneAdminRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services);
       },
       { prefix: '/v1' },

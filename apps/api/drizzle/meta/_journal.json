@@ -85,6 +85,20 @@
       "when": 1795003731350,
       "tag": "0011_lyrical_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795025016609,
+      "tag": "0012_catalog_options_hours_discounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795025697455,
+      "tag": "0013_menu_categories_archived",
+      "breakpoints": true
     }
   ]
 }

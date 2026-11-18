@@ -240,3 +240,17 @@ code {
   font-size: var(--size-body);
   letter-spacing: 0.08em;
 }
+
+.zone-map {
+  height: 60vh;
+  min-height: 20rem;
+  margin: var(--margin) 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+}
+
+.zone-vertex {
+  background: var(--color-plum);
+  border: 2px solid var(--color-white);
+  border-radius: 50%;
+}
