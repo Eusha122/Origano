@@ -4,13 +4,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
 import sharp from 'sharp';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { type Config, loadConfig } from '../config';
 import { AppError } from '../errors';
 import { unwrapDataKey } from '../security/crypto';
 import { withTestDb } from '../testing/db';
 import { TEST_DATA_KEYS } from '../testing/keys';
-import { createS3Store } from './store';
+import { createS3Store, type ObjectStore } from './store';
 import {
   type DocumentSubject,
   deleteDocumentContent,
@@ -67,13 +67,18 @@ describe('document vault', () => {
     expect(row?.storage_key).toMatch(/^docs\/[0-9a-f-]{36}$/);
     const raw = await storeOf.get(row?.storage_key ?? '');
     expect(raw.subarray(0, 3).toString('hex')).not.toBe('ffd8ff');
-    expect(raw.includes(Buffer.from('FixturePhone'))).toBe(false);
 
     const read = await readDocument(deps(), summary.id);
     if (!Buffer.isBuffer(read)) throw new Error('expected bytes');
     expect(read.subarray(0, 3).toString('hex')).toBe('ffd8ff');
     const meta = await sharp(read).metadata();
     expect(meta.exif).toBeUndefined();
+    expect(meta.icc).toBeUndefined();
+    expect(meta.xmp).toBeUndefined();
+    // The decrypted file carries none of the fixture's tags either.
+    expect(read.includes(Buffer.from('FixturePhone'))).toBe(false);
+    // The fixture is 3000 x 2000 with orientation 6: applied, it stands upright.
+    expect(meta.height ?? 0).toBeGreaterThan(meta.width ?? 0);
     expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeLessThanOrEqual(2000);
     expect(meta.format).toBe('jpeg');
   });
@@ -95,7 +100,8 @@ describe('document vault', () => {
     try {
       const summary = await storeDocument(deps(), SUBJECT, 'nid_front', fixture('polyglot.jpg'), UPLOADER);
       const read = await readDocument(deps(), summary.id);
-      expect(Buffer.isBuffer(read) && read.includes(Buffer.from('<html'))).toBe(false);
+      if (!Buffer.isBuffer(read)) throw new Error('expected bytes');
+      expect(read.includes(Buffer.from('<html'))).toBe(false);
     } catch (error) {
       expect(error).toBeInstanceOf(AppError);
       expect((error as AppError).code).toBe('unsupported_document');
@@ -107,6 +113,12 @@ describe('document vault', () => {
       code: 'unsupported_document',
     });
     expect(await rows()).toHaveLength(0);
+  });
+
+  it('refuses an image over 40 megapixels even when sharp itself would decode it', async () => {
+    await expect(storeDocument(deps(), SUBJECT, 'nid_front', fixture('bomb-mid.png'), UPLOADER)).rejects.toMatchObject({
+      code: 'unsupported_document',
+    });
   });
 
   it('refuses a body over 8 MB', async () => {
@@ -196,5 +208,88 @@ describe('document vault', () => {
     const sealed = row?.sealed_key as { kid: string; wrappedKey: string };
     expect(() => unwrapDataKey(other.dataKeys, sealed, row?.id ?? '')).toThrow();
     expect(unwrapDataKey(config.dataKeys, sealed, row?.id ?? '')).toHaveLength(32);
+  });
+  it('keeps the key of a failed upload so the object can still be found and removed', async () => {
+    let written = '';
+    const flaky: ObjectStore = {
+      ...storeOf,
+      put: async (key, body) => {
+        await storeOf.put(key, body);
+        written = key;
+        throw new Error('connection reset after the write');
+      },
+    };
+    await expect(
+      storeDocument({ ...deps(), store: flaky }, SUBJECT, 'nid_front', fixture('ok.jpg'), UPLOADER),
+    ).rejects.toThrow('connection reset');
+    expect(await rows()).toMatchObject([{ status: 'deleted', deleted_reason: 'upload_failed', storage_key: null }]);
+    await expect(storeOf.get(written)).rejects.toThrow();
+  });
+
+  it('two uploads of one kind at once leave one stored document and no error', async () => {
+    const results = await Promise.all(
+      [1, 2, 3].map(() => storeDocument(deps(), SUBJECT, 'nid_front', fixture('ok.jpg'), UPLOADER)),
+    );
+    expect(results).toHaveLength(3);
+    const all = await rows();
+    expect(all.filter((r) => r.status === 'stored')).toHaveLength(1);
+    expect(all.filter((r) => r.storage_key !== null)).toHaveLength(1);
+  });
+
+  it('does not bring back an upload the sweep already gave up on', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slow: ObjectStore = {
+      ...storeOf,
+      put: async (key, body) => {
+        await gate;
+        await storeOf.put(key, body);
+      },
+    };
+    const upload = storeDocument({ ...deps(), store: slow }, SUBJECT, 'nid_front', fixture('ok.jpg'), UPLOADER);
+    const settled = upload.then(
+      () => 'stored',
+      () => 'refused',
+    );
+    await vi.waitFor(async () => expect(await rows()).toHaveLength(1));
+    await db.execute(sql`UPDATE identity_documents SET uploaded_at = now() - interval '2 hours'`);
+    await pruneDocuments(deps(), new Date(), async () => false);
+    release();
+    expect(await settled).toBe('refused');
+    await pruneDocuments(deps(), new Date(), async () => false);
+    expect(await rows()).toMatchObject([{ status: 'deleted', storage_key: null }]);
+  });
+
+  it('gives an upload that is still in flight at decision time its delete date', async () => {
+    const summary = await storeDocument(deps(), SUBJECT, 'nid_front', fixture('ok.jpg'), UPLOADER);
+    await db.execute(sql`UPDATE identity_documents SET status = 'pending', sealed_key = NULL WHERE id = ${summary.id}`);
+    await recordDecision(db, SUBJECT, 'rejected', randomUUID(), new Date(Date.now() + 86_400_000));
+    const [row] = await db.execute<{ delete_after: Date | null }>(
+      sql`SELECT delete_after FROM identity_documents WHERE id = ${summary.id}`,
+    );
+    expect(row?.delete_after).not.toBeNull();
+  });
+
+  it('one document that cannot be deleted does not stop the others', async () => {
+    const a = await storeDocument(deps(), SUBJECT, 'nid_front', fixture('ok.jpg'), UPLOADER);
+    const b = await storeDocument(deps(), SUBJECT, 'nid_back', fixture('ok.jpg'), UPLOADER);
+    await db.execute(sql`UPDATE identity_documents SET delete_after = now() - interval '1 minute'`);
+    const [first] = await rows();
+    const failing: ObjectStore = {
+      ...storeOf,
+      delete: async (key) => {
+        if (key === first?.storage_key) throw new Error('storage down');
+        await storeOf.delete(key);
+      },
+    };
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await pruneDocuments({ ...deps(), store: failing }, new Date(), async () => false)).toBe(1);
+    quiet.mockRestore();
+    // The next pass finishes the one that failed.
+    expect(await pruneDocuments(deps(), new Date(), async () => false)).toBe(1);
+    expect(await readDocument(deps(), a.id)).toBe('deleted');
+    expect(await readDocument(deps(), b.id)).toBe('deleted');
   });
 });

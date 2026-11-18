@@ -109,14 +109,16 @@ export async function storeDocument(
   try {
     await deps.store.put(storageKey, body);
   } catch (error) {
-    await deps.db.execute(sql`UPDATE identity_documents SET status = 'deleted', deleted_at = now(),
-      deleted_reason = 'upload_failed', storage_key = NULL WHERE id = ${id}`);
+    // The object may exist even though the call failed, so the key stays until the purge has run.
+    await deps.db.transaction((tx) => markDeleted(tx, id, 'upload_failed'));
+    await purgeObject(deps, id).catch(() => {});
     throw error;
   }
 
   const replaced: string[] = [];
   const summary = await deps.db.transaction(async (tx) => {
-    // The older document goes first: only one stored row per kind may exist.
+    // Two uploads of one kind at once take turns; the older document goes first: only one stored row per kind may exist.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`doc:${subject.type}:${subject.id}:${kind}`}))`);
     const old = await tx.execute<{ id: string }>(sql`
       SELECT id FROM identity_documents
       WHERE subject_type = ${subject.type} AND subject_id = ${subject.id} AND kind = ${kind}
@@ -128,7 +130,9 @@ export async function storeDocument(
     const rows = await tx.execute<Row>(sql`
       UPDATE identity_documents SET status = 'stored', sealed_key = ${JSON.stringify(sealed)}::jsonb,
         byte_size = ${body.length}
-      WHERE id = ${id} RETURNING id, kind, status, uploaded_at, review_outcome`);
+      WHERE id = ${id} AND status = 'pending' RETURNING id, kind, status, uploaded_at, review_outcome`);
+    // A sweep may have given up on a very slow upload. Its object is purged later through the deleted row.
+    if (!rows[0]) throw new AppError('bad_request', 409, 'The upload took too long. Try again.');
     await writeAudit(tx, {
       actor: { type: 'user', id: uploadedBy },
       action: 'document.uploaded',
@@ -136,7 +140,7 @@ export async function storeDocument(
       targetId: id,
       data: { kind, subjectType: subject.type },
     });
-    return summarise(rows[0] as Row);
+    return summarise(rows[0]);
   });
 
   for (const oldId of replaced) await purgeObject(deps, oldId);
@@ -154,7 +158,18 @@ export async function readDocument(deps: VaultDeps, documentId: string): Promise
   if (row.status === 'deleted') return 'deleted';
   if (row.status !== 'stored' || !row.storage_key || !row.sealed_key) return null;
   const key = unwrapDataKey(deps.keys, row.sealed_key, documentId);
-  return decryptBytes(key, await deps.store.get(row.storage_key), documentId);
+  let sealed: Buffer;
+  try {
+    sealed = await deps.store.get(row.storage_key);
+  } catch (error) {
+    // A delete may have won the race since the row was read.
+    const again = await deps.db.execute<{ status: string }>(
+      sql`SELECT status FROM identity_documents WHERE id = ${documentId}`,
+    );
+    if (again[0]?.status === 'deleted') return 'deleted';
+    throw error;
+  }
+  return decryptBytes(key, sealed, documentId);
 }
 
 /** Every document of a subject, newest first. Never keys. */
@@ -177,7 +192,7 @@ export async function recordDecision(
   await tx.execute(sql`
     UPDATE identity_documents SET review_outcome = ${outcome}, reviewed_by = ${reviewerId}, reviewed_at = now(),
       delete_after = ${deleteAfter.toISOString()}
-    WHERE subject_type = ${subject.type} AND subject_id = ${subject.id} AND status = 'stored'`);
+    WHERE subject_type = ${subject.type} AND subject_id = ${subject.id} AND status IN ('pending', 'stored')`);
 }
 
 /** Deletes the file and its key; the kind, reviewer, time and outcome stay. Safe to repeat. */
@@ -224,9 +239,16 @@ export async function pruneDocuments(
   );
   for (const r of leftovers) if (!work.has(r.id)) work.set(r.id, null);
 
+  let done = 0;
   for (const [id, reason] of work) {
-    if (reason) await deleteDocumentContent(deps, id, reason);
-    else await purgeObject(deps, id);
+    try {
+      if (reason) await deleteDocumentContent(deps, id, reason);
+      else await purgeObject(deps, id);
+      done += 1;
+    } catch (error) {
+      // Left for the next pass; the others must not wait behind it.
+      console.error(`document sweep: could not delete ${id}`, error instanceof Error ? error.message : error);
+    }
   }
-  return work.size;
+  return done;
 }

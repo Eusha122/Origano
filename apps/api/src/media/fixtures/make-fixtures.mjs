@@ -20,6 +20,7 @@ const jpg = await photo()
       GPSLongitude: '88 16 20/1',
     },
   })
+  .withMetadata({ orientation: 6 })
   .jpeg()
   .toBuffer();
 out('ok.jpg', jpg);
@@ -37,6 +38,13 @@ out(
     create: { width: 20000, height: 20000, channels: 3, background: { r: 128, g: 128, b: 128 } },
     limitInputPixels: false,
   })
+    .png({ compressionLevel: 9 })
+    .toBuffer(),
+);
+// 64 million pixels: over our 40 million limit but under sharp's own default, so only our limit refuses it.
+out(
+  'bomb-mid.png',
+  await sharp({ create: { width: 8000, height: 8000, channels: 3, background: { r: 128, g: 128, b: 128 } } })
     .png({ compressionLevel: 9 })
     .toBuffer(),
 );
