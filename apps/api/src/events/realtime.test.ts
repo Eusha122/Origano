@@ -96,11 +96,29 @@ describe('realtime websocket', () => {
   });
 
   it('a WebSocket that never authenticates receives nothing and is closed with 4401', async () => {
+    // An admin socket hears every hint, so its message proves the hint went out while the other socket waited.
+    const admin = new WebSocket(url());
+    const adminGot: string[] = [];
+    admin.on('message', (d) => adminGot.push(String(d)));
+    await opened(admin);
+    admin.send(JSON.stringify({ type: 'auth', token: await t.signIn('01711000004') }));
+    await expect.poll(() => adminGot.length).toBe(1);
+
     const ws = new WebSocket(url());
     const got: string[] = [];
     ws.on('message', (d) => got.push(String(d)));
-    expect(await closeCode(ws)).toBe(4401);
+    const closed = closeCode(ws);
+    await opened(ws);
+    const orderId = '3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b9a';
+    const hint = { orderId, customerId: 'c-x', restaurantId: 'r-x', riderId: null, zoneId: 'z-x', status: 'placed' };
+    await publisher.publish(EVENTS_CHANNEL, JSON.stringify(hint));
+    await expect.poll(() => adminGot.length).toBe(2);
+
+    expect(await closed).toBe(4401);
     expect(got).toEqual([]);
+    const adminClosed = closeCode(admin);
+    admin.close();
+    await adminClosed;
   }, 10_000);
 
   it('closes with 4400 on a malformed message and 4401 on a bad token', async () => {
