@@ -75,18 +75,19 @@ export const MenuItem = z.object({
 });
 export type MenuItem = z.infer<typeof MenuItem>;
 
+export const MenuCategory = z.object({
+  id: z.uuid(),
+  nameEn: z.string(),
+  nameBn: z.string(),
+  items: z.array(MenuItem),
+});
+export type MenuCategory = z.infer<typeof MenuCategory>;
+
 export const RestaurantDetail = RestaurantSummary.extend({
   addressLine: z.string(),
   hours: z.array(z.object({ day: z.number().int(), open: z.string(), close: z.string() })),
   popularItemIds: z.array(z.uuid()),
-  categories: z.array(
-    z.object({
-      id: z.uuid(),
-      nameEn: z.string(),
-      nameBn: z.string(),
-      items: z.array(MenuItem),
-    }),
-  ),
+  categories: z.array(MenuCategory),
 });
 export type RestaurantDetail = z.infer<typeof RestaurantDetail>;
 

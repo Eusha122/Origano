@@ -1,7 +1,14 @@
 import { ApiError } from '@oregano/api-client';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createWebSessionStore, deriveSession, handleAuthFailed, handleOrderHint, queryKeys } from './index';
+import {
+  createWebSessionStore,
+  deriveSession,
+  handleAuthFailed,
+  handleOrderHint,
+  optimisticUpdate,
+  queryKeys,
+} from './index';
 
 describe('query keys and hints', () => {
   it('a hint invalidates the order and every list', async () => {
@@ -165,5 +172,34 @@ describe('deriveSession while a stored session is being restored', () => {
       isSignedIn: false,
       isLoading: false,
     });
+  });
+});
+
+describe('optimistic updates', () => {
+  it('shows the change at once and puts the old value back on rollback', () => {
+    const client = new QueryClient();
+    const key = queryKeys.controls('r1');
+    client.setQueryData(key, { switchOn: true, busyExtraMinutes: 0 });
+    const rollback = optimisticUpdate<{ switchOn: boolean; busyExtraMinutes: number }>(client, key, (old) => ({
+      ...old,
+      switchOn: false,
+    }));
+    expect(client.getQueryData(key)).toEqual({ switchOn: false, busyExtraMinutes: 0 });
+    rollback();
+    expect(client.getQueryData(key)).toEqual({ switchOn: true, busyExtraMinutes: 0 });
+  });
+
+  it('leaves an empty cache empty, and its rollback does nothing', () => {
+    const client = new QueryClient();
+    const key = queryKeys.controls('r1');
+    const rollback = optimisticUpdate<number>(client, key, (old) => old + 1);
+    expect(client.getQueryData(key)).toBeUndefined();
+    rollback();
+    expect(client.getQueryData(key)).toBeUndefined();
+  });
+
+  it('keys each restaurant separately', () => {
+    expect(queryKeys.controls('a')).not.toEqual(queryKeys.controls('b'));
+    expect(queryKeys.ownerMenu('a')).toEqual(['owner-menu', 'a']);
   });
 });

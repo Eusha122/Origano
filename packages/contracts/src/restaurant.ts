@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUSES } from '@oregano/domain';
 import { z } from 'zod';
+import { MenuCategory } from './catalog';
 
 /** The role is always `staff`: owners come only from an approved application. */
 export const AddStaffBody = z.object({ phone: z.string().trim().max(30) });
@@ -159,3 +160,22 @@ export const Discount = z.object({
   isActive: z.boolean(),
 });
 export type Discount = z.infer<typeof Discount>;
+
+/** The owner's view of the whole menu: base prices, every item. */
+export const OwnerMenu = z.object({ categories: z.array(MenuCategory) });
+export type OwnerMenu = z.infer<typeof OwnerMenu>;
+
+export const CategorySummary = z.object({ id: z.uuid(), nameEn: z.string(), nameBn: z.string() });
+export type CategorySummary = z.infer<typeof CategorySummary>;
+
+export const ItemAvailability = z.object({ id: z.uuid(), isAvailable: z.boolean() });
+export type ItemAvailability = z.infer<typeof ItemAvailability>;
+
+export const HoursResponse = z.object({ intervals: z.array(HoursInterval) });
+export type HoursResponse = z.infer<typeof HoursResponse>;
+
+export const DiscountList = z.object({ discounts: z.array(Discount) });
+export type DiscountList = z.infer<typeof DiscountList>;
+
+export const PhotoResponse = z.object({ imageUrl: z.string().nullable() });
+export type PhotoResponse = z.infer<typeof PhotoResponse>;

@@ -7,17 +7,33 @@ import {
   ApiErrorBody,
   ApplicationQueueItem,
   type ApproveRestaurantBody,
+  type CategoryBody,
+  CategorySummary,
   type CreateAgencyBody,
+  Discount,
+  type DiscountBody,
+  DiscountList,
+  type DiscountPatch,
   DocumentLink,
   DocumentSummary,
   type ErrorCode,
+  type HoursBody,
+  HoursResponse,
+  ItemAvailability,
+  type ItemBody,
+  type ItemPatch,
   Me,
+  MenuItem,
+  type OptionsBody,
   Order,
   OtpRequestResponse,
+  OwnerMenu,
+  PhotoResponse,
   type PlaceOrderBody,
   RefreshResponse,
   type RestaurantApplicationBody,
   RestaurantApplicationView,
+  RestaurantControls,
   RestaurantDetail,
   RestaurantListResponse,
   type RiderApplicationBody,
@@ -116,6 +132,33 @@ export type ApiClient = {
   saveRestaurantApplication(body: RestaurantApplicationBody): Promise<RestaurantApplicationView>;
   uploadRestaurantDocument(kind: string, file: UploadFile): Promise<DocumentSummary>;
   submitRestaurantApplication(noTradeLicence: boolean): Promise<RestaurantApplicationView>;
+  /** The owner's switch, busy mode and what customers see. */
+  restaurantControls(restaurantId: string): Promise<RestaurantControls>;
+  setRestaurantOpen(restaurantId: string, isOpen: boolean): Promise<RestaurantControls>;
+  setBusyMode(restaurantId: string, extraMinutes: 0 | 10 | 20): Promise<RestaurantControls>;
+  setItemAvailability(restaurantId: string, itemId: string, isAvailable: boolean): Promise<ItemAvailability>;
+  /** The whole menu with base prices, for staff. */
+  ownerMenu(restaurantId: string): Promise<OwnerMenu>;
+  createCategory(restaurantId: string, body: CategoryBody): Promise<CategorySummary>;
+  renameCategory(restaurantId: string, categoryId: string, body: Partial<CategoryBody>): Promise<CategorySummary>;
+  deleteCategory(restaurantId: string, categoryId: string): Promise<OwnerMenu>;
+  reorderCategories(restaurantId: string, ids: string[]): Promise<OwnerMenu>;
+  createItem(restaurantId: string, categoryId: string, body: ItemBody): Promise<MenuItem>;
+  updateItem(restaurantId: string, itemId: string, patch: ItemPatch): Promise<MenuItem>;
+  archiveItem(restaurantId: string, itemId: string): Promise<OwnerMenu>;
+  reorderItems(restaurantId: string, categoryId: string, ids: string[]): Promise<OwnerMenu>;
+  setItemOptions(restaurantId: string, itemId: string, body: OptionsBody): Promise<MenuItem>;
+  uploadItemPhoto(restaurantId: string, itemId: string, file: UploadFile): Promise<PhotoResponse>;
+  removeItemPhoto(restaurantId: string, itemId: string): Promise<PhotoResponse>;
+  uploadRestaurantPhoto(restaurantId: string, file: UploadFile): Promise<PhotoResponse>;
+  removeRestaurantPhoto(restaurantId: string): Promise<PhotoResponse>;
+  openingHours(restaurantId: string): Promise<HoursResponse>;
+  setOpeningHours(restaurantId: string, body: HoursBody): Promise<HoursResponse>;
+  setPrepMinutes(restaurantId: string, prepMinutes: number): Promise<RestaurantControls>;
+  discounts(restaurantId: string): Promise<Discount[]>;
+  createDiscount(restaurantId: string, body: DiscountBody): Promise<Discount>;
+  updateDiscount(restaurantId: string, discountId: string, patch: DiscountPatch): Promise<Discount>;
+  deleteDiscount(restaurantId: string, discountId: string): Promise<void>;
   staff(restaurantId: string): Promise<StaffMember[]>;
   addStaff(restaurantId: string, phone: string): Promise<StaffMember>;
   removeStaff(restaurantId: string, userId: string): Promise<void>;
@@ -168,7 +211,7 @@ const Team = z.object({ members: z.array(TeamMember) });
 const AccountSummarySchema = z.object({ id: z.string(), status: z.enum(['approved', 'suspended']) });
 
 type Request = {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   body?: unknown;
   /** A file upload. Sent as multipart; the content type is left to the platform, which adds the boundary. */
@@ -379,15 +422,19 @@ export function createApiClient(opts: {
   const get = <T>(schema: z.ZodType<T>, path: string) => call(schema, { method: 'GET', path });
   const post = <T>(schema: z.ZodType<T>, path: string, body?: unknown) => call(schema, { method: 'POST', path, body });
   const put = <T>(schema: z.ZodType<T>, path: string, body?: unknown) => call(schema, { method: 'PUT', path, body });
+  const patch = <T>(schema: z.ZodType<T>, path: string, body?: unknown) =>
+    call(schema, { method: 'PATCH', path, body });
+  /** A DELETE that answers with a body. */
+  const del = <T>(schema: z.ZodType<T>, path: string) => call(schema, { method: 'DELETE', path });
   /** A DELETE answers 204 with no body. */
   const remove = async (path: string): Promise<void> => {
     await send({ method: 'DELETE', path });
   };
-  const upload = <T>(schema: z.ZodType<T>, path: string, file: UploadFile) => {
+  const upload = <T>(schema: z.ZodType<T>, path: string, file: UploadFile, method: 'POST' | 'PUT' = 'POST') => {
     const form = new FormData();
     // React Native's FormData takes the { uri, name, type } object as a file; the web takes a Blob.
     form.append('file', file as Blob);
-    return call(schema, { method: 'POST', path, form });
+    return call(schema, { method, path, form });
   };
   const id = encodeURIComponent;
 
@@ -420,6 +467,38 @@ export function createApiClient(opts: {
     myOrders: async () => (await get(Orders, '/v1/orders')).orders,
     order: (orderId) => get(Order, `/v1/orders/${id(orderId)}`),
     cancelOrder: (orderId) => post(Order, `/v1/orders/${id(orderId)}/cancel`),
+    restaurantControls: (rid) => get(RestaurantControls, `/v1/restaurants/${id(rid)}/controls`),
+    setRestaurantOpen: (rid, isOpen) => put(RestaurantControls, `/v1/restaurants/${id(rid)}/open`, { isOpen }),
+    setBusyMode: (rid, extraMinutes) => put(RestaurantControls, `/v1/restaurants/${id(rid)}/busy`, { extraMinutes }),
+    setItemAvailability: (rid, itemId, isAvailable) =>
+      put(ItemAvailability, `/v1/restaurants/${id(rid)}/items/${id(itemId)}/availability`, { isAvailable }),
+    ownerMenu: (rid) => get(OwnerMenu, `/v1/restaurants/${id(rid)}/menu`),
+    createCategory: (rid, body) => post(CategorySummary, `/v1/restaurants/${id(rid)}/categories`, body),
+    renameCategory: (rid, cid, body) =>
+      patch(CategorySummary, `/v1/restaurants/${id(rid)}/categories/${id(cid)}`, body),
+    deleteCategory: (rid, cid) => del(OwnerMenu, `/v1/restaurants/${id(rid)}/categories/${id(cid)}`),
+    reorderCategories: (rid, ids) => put(OwnerMenu, `/v1/restaurants/${id(rid)}/categories/order`, { ids }),
+    createItem: (rid, cid, body) => post(MenuItem, `/v1/restaurants/${id(rid)}/categories/${id(cid)}/items`, body),
+    updateItem: (rid, itemId, body) => patch(MenuItem, `/v1/restaurants/${id(rid)}/items/${id(itemId)}`, body),
+    archiveItem: (rid, itemId) => del(OwnerMenu, `/v1/restaurants/${id(rid)}/items/${id(itemId)}`),
+    reorderItems: (rid, cid, ids) =>
+      put(OwnerMenu, `/v1/restaurants/${id(rid)}/categories/${id(cid)}/items/order`, { ids }),
+    setItemOptions: (rid, itemId, body) =>
+      put(MenuItem, `/v1/restaurants/${id(rid)}/items/${id(itemId)}/options`, body),
+    uploadItemPhoto: (rid, itemId, file) =>
+      upload(PhotoResponse, `/v1/restaurants/${id(rid)}/items/${id(itemId)}/photo`, file, 'PUT'),
+    removeItemPhoto: (rid, itemId) => del(PhotoResponse, `/v1/restaurants/${id(rid)}/items/${id(itemId)}/photo`),
+    uploadRestaurantPhoto: (rid, file) => upload(PhotoResponse, `/v1/restaurants/${id(rid)}/photo`, file, 'PUT'),
+    removeRestaurantPhoto: (rid) => del(PhotoResponse, `/v1/restaurants/${id(rid)}/photo`),
+    openingHours: (rid) => get(HoursResponse, `/v1/restaurants/${id(rid)}/hours`),
+    setOpeningHours: (rid, body) => put(HoursResponse, `/v1/restaurants/${id(rid)}/hours`, body),
+    setPrepMinutes: (rid, prepMinutes) => put(RestaurantControls, `/v1/restaurants/${id(rid)}/prep`, { prepMinutes }),
+    discounts: async (rid) => (await get(DiscountList, `/v1/restaurants/${id(rid)}/discounts`)).discounts,
+    createDiscount: (rid, body) => post(Discount, `/v1/restaurants/${id(rid)}/discounts`, body),
+    updateDiscount: (rid, did, body) => patch(Discount, `/v1/restaurants/${id(rid)}/discounts/${id(did)}`, body),
+    deleteDiscount: async (rid, did) => {
+      await send({ method: 'DELETE', path: `/v1/restaurants/${id(rid)}/discounts/${id(did)}` });
+    },
     restaurantOrders: async () => (await get(Orders, '/v1/restaurant/orders')).orders,
     acceptOrder: (orderId, readyInMinutes) =>
       post(Order, `/v1/restaurant/orders/${id(orderId)}/accept`, { readyInMinutes }),
