@@ -1,6 +1,7 @@
 import { type Money, poisha } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { Db, Executor } from '../db/client';
+import { insertDefaultHours } from './hours-repo';
 
 type Point = { lat: number; lng: number };
 
@@ -232,7 +233,10 @@ export async function createApprovedRestaurant(
         ST_SetSRID(ST_MakePoint(${r.location.lng}, ${r.location.lat}), 4326)::geography, false, 'approved')
       ON CONFLICT (slug) DO NOTHING RETURNING id`);
     const id = rows[0]?.id;
-    if (id) return { id, slug };
+    if (id) {
+      await insertDefaultHours(tx, id);
+      return { id, slug };
+    }
   }
   throw new Error('No free restaurant slug');
 }
