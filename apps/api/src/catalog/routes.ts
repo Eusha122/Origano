@@ -3,8 +3,12 @@ import { deliveryFee } from '@oregano/domain';
 import type { FastifyInstance } from 'fastify';
 import type { Services } from '../app';
 import { AppError } from '../errors';
+import { popularItemIds } from '../ordering/popular';
 import { findZoneForPoint, type Zone } from '../zones/repo';
-import { findRestaurantBySlug, getMenu, listRestaurants, type RestaurantRow } from './repo';
+import { publicImageUrl } from './images';
+import { getMenu } from './menu-read';
+import { findRestaurantBySlug, listRestaurants, type RestaurantRow, stateOf } from './repo';
+import { formatMinute } from './state';
 
 const invalidLocation = () => new AppError('invalid_location', 400, 'That location is not valid.');
 
@@ -32,7 +36,8 @@ async function zoneFor(db: Services['db'], point: { lat: number; lng: number }):
   }
 }
 
-function summary(r: RestaurantRow, zone: Zone | null) {
+function summary(r: RestaurantRow, zone: Zone | null, now: Date) {
+  const state = stateOf(r, now);
   return {
     id: r.id,
     slug: r.slug,
@@ -40,25 +45,28 @@ function summary(r: RestaurantRow, zone: Zone | null) {
     nameBn: r.nameBn,
     cuisineEn: r.cuisineEn,
     cuisineBn: r.cuisineBn,
-    isOpen: r.isOpen,
-    prepMinutes: r.prepMinutes,
+    isOpen: state.isOpen,
+    opensAt: state.opensAt,
+    prepMinutes: state.prepMinutes,
+    coverImageUrl: publicImageUrl(r.coverImageKey, 'large'),
     deliveryFee: zone && r.zoneId === zone.id && r.distanceMeters !== null ? deliveryFee(r.distanceMeters, zone) : null,
   };
 }
 
-export function catalogRoutes(app: FastifyInstance, { db }: Services): void {
+export function catalogRoutes(app: FastifyInstance, { db, clock }: Services): void {
+  const now = () => (clock ? clock() : new Date());
   app.get('/restaurants', async (request): Promise<RestaurantListResponse> => {
     const point = parseLocation(request.query);
     if (!point) {
       const restaurants = await listRestaurants(db, {});
-      return { zone: null, restaurants: restaurants.map((r) => summary(r, null)) };
+      return { zone: null, restaurants: restaurants.map((r) => summary(r, null, now())) };
     }
     const zone = await zoneFor(db, point);
     if (!zone) return { zone: null, restaurants: [] };
     const restaurants = await listRestaurants(db, { zoneId: zone.id, point });
     return {
       zone: { id: zone.id, slug: zone.slug, nameEn: zone.nameEn, nameBn: zone.nameBn },
-      restaurants: restaurants.map((r) => summary(r, zone)),
+      restaurants: restaurants.map((r) => summary(r, zone, now())),
     };
   });
 
@@ -67,7 +75,18 @@ export function catalogRoutes(app: FastifyInstance, { db }: Services): void {
     const zone = point ? await zoneFor(db, point) : null;
     const restaurant = await findRestaurantBySlug(db, request.params.slug, point ?? undefined);
     if (!restaurant) throw new AppError('not_found', 404, 'Not found.');
-    const categories = await getMenu(db, restaurant.id);
-    return { ...summary(restaurant, zone), addressLine: restaurant.addressLine, categories };
+    const at = now();
+    const categories = await getMenu(db, restaurant.id, at);
+    return {
+      ...summary(restaurant, zone, at),
+      addressLine: restaurant.addressLine,
+      hours: restaurant.intervals.map((i) => ({
+        day: i.day,
+        open: formatMinute(i.openMinute),
+        close: formatMinute(i.closeMinute),
+      })),
+      popularItemIds: await popularItemIds(db, restaurant.id, 4),
+      categories,
+    };
   });
 }
