@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { adminRoutes } from './admin/routes';
 import { catalogRoutes } from './catalog/routes';
@@ -38,13 +39,34 @@ function clientErrorStatus(error: unknown): number | null {
   return statusCode;
 }
 
+/** Anything logged with request headers must never carry these. */
+const REDACTED_PATHS = [
+  'headers.authorization',
+  'headers.cookie',
+  'headers["x-document-ticket"]',
+  'headers["set-cookie"]',
+  '*.headers.authorization',
+  '*.headers.cookie',
+  '*.headers["x-document-ticket"]',
+  '*.headers["set-cookie"]',
+];
+
 export async function buildApp(deps: {
   config: Config;
   checks: ReadinessCheck[];
   services?: Services;
+  /** Tests only: send logs here instead of the default, so they can be inspected. */
+  logStream?: { write(line: string): void };
 }): Promise<FastifyInstance> {
+  const logger =
+    deps.logStream !== undefined
+      ? { level: 'info', redact: REDACTED_PATHS, stream: deps.logStream }
+      : deps.config.nodeEnv === 'test'
+        ? false
+        : { level: deps.config.logLevel, redact: REDACTED_PATHS };
   const app = Fastify({
-    logger: deps.config.nodeEnv === 'test' ? false : { level: deps.config.logLevel },
+    logger,
+    trustProxy: deps.config.trustProxy,
     genReqId: (request) => {
       const incoming = request.headers['x-request-id'];
       return typeof incoming === 'string' && REQUEST_ID.test(incoming) ? incoming : randomUUID();
@@ -76,6 +98,8 @@ export async function buildApp(deps: {
       .code(500)
       .send({ error: { code: 'internal', message: 'Something went wrong.', requestId: request.id } });
   });
+
+  await app.register(helmet);
 
   // Only the listed origins may call the API from a browser; an empty list allows none.
   await app.register(cors, {

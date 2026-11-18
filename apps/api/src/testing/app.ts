@@ -1,16 +1,27 @@
+import { randomBytes } from 'node:crypto';
 import { normalizeBdPhone } from '@oregano/domain';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp } from '../app';
-import { loadConfig } from '../config';
+import { type Limits, loadConfig } from '../config';
 import type { Db } from '../db/client';
 import { type DemoIds, seedDemo } from '../dev/seed-demo';
 import { RealtimeHub } from '../events/realtime';
 import { CapturingOtpSender } from '../identity/otp';
 import { withTestDb } from './db';
+import { TEST_DATA_KEYS } from './keys';
 
 /** A real API on a real, migrated test database, with demo data seeded before each test. */
-export function withTestApp(options: { devOtpPeek?: boolean; realtime?: boolean } = {}): {
+export function withTestApp(
+  options: {
+    devOtpPeek?: boolean;
+    realtime?: boolean;
+    /** Relaxed by default, so ordinary test files never trip a limit from 127.0.0.1. */
+    limitsProfile?: 'standard' | 'relaxed';
+    limits?: Partial<Limits>;
+    trustProxy?: string[];
+  } = {},
+): {
   app: () => FastifyInstance;
   db: Db;
   otp: CapturingOtpSender;
@@ -20,13 +31,18 @@ export function withTestApp(options: { devOtpPeek?: boolean; realtime?: boolean 
 } {
   const { db } = withTestDb();
   const otp = new CapturingOtpSender();
-  const config = loadConfig({
+  const base = loadConfig({
     NODE_ENV: 'test',
     DATABASE_URL: 'postgres://u:p@localhost/x',
     REDIS_URL: 'redis://localhost',
     OTP_SECRET: 'test-only-otp-secret-0123456789abcdef',
     DEV_OTP_PEEK: options.devOtpPeek ? 'true' : 'false',
+    DATA_KEYS: TEST_DATA_KEYS,
+    LIMITS_PROFILE: options.limitsProfile ?? 'relaxed',
+    RATE_LIMIT_PREFIX: `test-${randomBytes(6).toString('hex')}`,
+    TRUST_PROXY: options.trustProxy?.join(',') ?? '',
   });
+  const config = { ...base, limits: { ...base.limits, ...options.limits } };
   let instance: FastifyInstance | undefined;
   let ids: DemoIds | undefined;
   const hub = options.realtime ? new RealtimeHub(config.redisUrl) : undefined;

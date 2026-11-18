@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^11.4.3",
+    "@fastify/helmet": "^13.2.0",
     "@fastify/websocket": "^11.3.7",
     "@oregano/contracts": "workspace:*",
     "@oregano/domain": "workspace:*",

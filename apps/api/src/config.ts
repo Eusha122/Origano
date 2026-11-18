@@ -10,7 +10,81 @@ export type Config = {
   sessionTtlDays: number;
   corsOrigins: string[];
   devOtpPeek: boolean;
+  /** Addresses of the proxies in front of the API whose X-Forwarded-For may be believed; false trusts none. */
+  trustProxy: string[] | false;
+  /** Master keys for sealing SMS text, payout numbers and documents. The first one seals new data. */
+  dataKeys: { active: string; keys: Map<string, Buffer> };
+  limitsProfile: 'standard' | 'relaxed';
+  limits: Limits;
+  smsProviders: string[];
+  /** Prefix for Redis rate-limit keys, so test runs never share counters. */
+  rateLimitPrefix: string;
+  webOtpDomain: string | null;
+  s3: {
+    endpoint: string;
+    region: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    forcePathStyle: boolean;
+  };
 };
+
+export type Limits = {
+  readonly otpTtlSeconds: number;
+  readonly otpResendSeconds: number;
+  readonly otpMaxAttempts: number;
+  readonly otpSendsPerPhoneHour: number;
+  readonly otpSendsPerPhoneDay: number;
+  readonly otpSendsPerIpHour: number;
+  readonly otpSendsPerIpDay: number;
+  readonly otpSendsGlobalHour: number;
+  readonly otpFailuresPerPhoneDay: number;
+  readonly otpFailuresPerIpHour: number;
+  readonly routePerIpMinute: number;
+  readonly writesPerUserMinute: number;
+  readonly ordersPerUserTenMinutes: number;
+  readonly openOrdersPerCustomer: number;
+  readonly restaurantListPerIpMinute: number;
+  readonly refreshPerIpMinute: number;
+  readonly wsUpgradesPerIpMinute: number;
+  readonly wsConnectionsPerIp: number;
+  readonly uploadsPerUserHour: number;
+  readonly staffPerRestaurant: number;
+};
+
+/** The blueprint section 7 table. Times and the per-code attempt cap are never scaled. */
+const STANDARD_LIMITS: Limits = {
+  otpTtlSeconds: 300,
+  otpResendSeconds: 60,
+  otpMaxAttempts: 5,
+  otpSendsPerPhoneHour: 5,
+  otpSendsPerPhoneDay: 10,
+  otpSendsPerIpHour: 20,
+  otpSendsPerIpDay: 100,
+  otpSendsGlobalHour: 1000,
+  otpFailuresPerPhoneDay: 10,
+  otpFailuresPerIpHour: 30,
+  routePerIpMinute: 300,
+  writesPerUserMinute: 60,
+  ordersPerUserTenMinutes: 5,
+  openOrdersPerCustomer: 3,
+  restaurantListPerIpMinute: 120,
+  refreshPerIpMinute: 30,
+  wsUpgradesPerIpMinute: 30,
+  wsConnectionsPerIp: 20,
+  uploadsPerUserHour: 30,
+  staffPerRestaurant: 20,
+};
+
+const UNSCALED: ReadonlySet<string> = new Set(['otpTtlSeconds', 'otpResendSeconds', 'otpMaxAttempts']);
+
+function limitsFor(profile: 'standard' | 'relaxed'): Limits {
+  if (profile === 'standard') return STANDARD_LIMITS;
+  return Object.fromEntries(
+    Object.entries(STANDARD_LIMITS).map(([name, value]) => [name, UNSCALED.has(name) ? value : value * 100]),
+  ) as Limits;
+}
 
 export class ConfigError extends Error {
   constructor(readonly problems: string[]) {
@@ -42,6 +116,27 @@ const corsOrigins = z
     return origins;
   });
 
+/** `kid:base64key[,kid:base64key...]`; every key is exactly 32 bytes. The first one is active. */
+const dataKeys = z.string({ error: 'is required' }).transform((value, ctx) => {
+  const keys = new Map<string, Buffer>();
+  for (const part of value.split(',')) {
+    const [kid, encoded, ...rest] = part.trim().split(':');
+    const key = encoded === undefined ? null : Buffer.from(encoded, 'base64');
+    if (!kid || !/^[A-Za-z0-9_-]{1,16}$/.test(kid) || rest.length > 0 || key?.length !== 32 || keys.has(kid)) {
+      ctx.addIssue({ code: 'custom', message: 'must be kid:base64key, each key exactly 32 bytes' });
+      return z.NEVER;
+    }
+    keys.set(kid, key);
+  }
+  return { active: keys.keys().next().value as string, keys };
+});
+
+const list = (value: string): string[] =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item !== '');
+
 const schema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production'], { error: 'must be development, test or production' }),
@@ -61,10 +156,35 @@ const schema = z
     SESSION_TTL_DAYS: z.coerce.number({ error: 'must be a number' }).int().min(1).max(365).default(60),
     CORS_ORIGINS: corsOrigins,
     DEV_OTP_PEEK: z.enum(['true', 'false'], { error: 'must be true or false' }).default('false'),
+    TRUST_PROXY: z.string().default('').transform(list),
+    DATA_KEYS: dataKeys,
+    LIMITS_PROFILE: z.enum(['standard', 'relaxed'], { error: 'must be standard or relaxed' }).default('standard'),
+    SMS_PROVIDERS: z.string().default('log').transform(list),
+    RATE_LIMIT_PREFIX: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,40}$/, { error: 'must be letters, digits, - or _' })
+      .default('oregano'),
+    WEB_OTP_DOMAIN: z.string().optional(),
+    S3_ENDPOINT: z.string().default('http://localhost:9000').refine(isUsableUrl, { error: 'must be a valid URL' }),
+    S3_REGION: z.string().default('us-east-1'),
+    S3_BUCKET: z.string().default('oregano'),
+    S3_ACCESS_KEY_ID: z.string().default('oregano'),
+    S3_SECRET_ACCESS_KEY: z.string().default('oregano-dev-secret'),
+    S3_FORCE_PATH_STYLE: z.enum(['true', 'false'], { error: 'must be true or false' }).default('true'),
   })
-  .refine((v) => !(v.NODE_ENV === 'production' && v.DEV_OTP_PEEK === 'true'), {
-    path: ['DEV_OTP_PEEK'],
-    error: 'must not be true in production',
+  .superRefine((v, ctx) => {
+    if (v.NODE_ENV !== 'production') return;
+    const refuse = (name: string, message: string) => ctx.addIssue({ code: 'custom', path: [name], message });
+    if (v.DEV_OTP_PEEK === 'true') refuse('DEV_OTP_PEEK', 'must not be true in production');
+    if (v.LIMITS_PROFILE === 'relaxed') refuse('LIMITS_PROFILE', 'must be standard in production');
+    if (new Set(v.SMS_PROVIDERS).size < 2 || v.SMS_PROVIDERS.includes('log')) {
+      refuse('SMS_PROVIDERS', 'must name at least two different real providers in production, and not log');
+    }
+    if (v.TRUST_PROXY.length === 0) refuse('TRUST_PROXY', 'must list the proxies in front of the API in production');
+    if (v.CORS_ORIGINS.some((origin) => !origin.startsWith('https://'))) {
+      refuse('CORS_ORIGINS', 'must be https only in production');
+    }
+    if (!v.S3_ENDPOINT.startsWith('https://')) refuse('S3_ENDPOINT', 'must be https in production');
   });
 
 /** Validates every setting at once. Never echoes a value, because values can hold secrets. */
@@ -84,5 +204,20 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     sessionTtlDays: v.SESSION_TTL_DAYS,
     corsOrigins: v.CORS_ORIGINS,
     devOtpPeek: v.DEV_OTP_PEEK === 'true',
+    trustProxy: v.TRUST_PROXY.length > 0 ? v.TRUST_PROXY : false,
+    dataKeys: v.DATA_KEYS,
+    limitsProfile: v.LIMITS_PROFILE,
+    limits: limitsFor(v.LIMITS_PROFILE),
+    smsProviders: v.SMS_PROVIDERS,
+    rateLimitPrefix: v.RATE_LIMIT_PREFIX,
+    webOtpDomain: v.WEB_OTP_DOMAIN ?? null,
+    s3: {
+      endpoint: v.S3_ENDPOINT,
+      region: v.S3_REGION,
+      bucket: v.S3_BUCKET,
+      accessKeyId: v.S3_ACCESS_KEY_ID,
+      secretAccessKey: v.S3_SECRET_ACCESS_KEY,
+      forcePathStyle: v.S3_FORCE_PATH_STYLE === 'true',
+    },
   };
 }
