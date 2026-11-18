@@ -37,7 +37,8 @@ export function RidersOnly() {
 }
 
 /** Online switch, then the order the rider holds, or else the offers to claim. */
-export function RiderScreen(props: { isOnline: boolean }) {
+export function RiderScreen(props: { isOnline: boolean; pausedReason?: string }) {
+  const paused = props.pausedReason !== undefined;
   const { locale } = useLocale();
   const api = useApi();
   const session = useSession();
@@ -49,7 +50,7 @@ export function RiderScreen(props: { isOnline: boolean }) {
     refetchInterval: OPEN_ORDER_REFETCH_MS,
   });
   const order = held.data?.find((entry) => !isTerminal(entry.status)) ?? null;
-  const browsing = props.isOnline && held.isSuccess && order === null;
+  const browsing = !paused && props.isOnline && held.isSuccess && order === null;
 
   const toggle = useMutation({
     mutationFn: () => api.setOnline(!props.isOnline),
@@ -62,12 +63,21 @@ export function RiderScreen(props: { isOnline: boolean }) {
     <Screen scroll>
       <Heading>{t(locale, 'rider.title')}</Heading>
       <LanguageButton />
-      <Button
-        label={t(locale, props.isOnline ? 'rider.goOffline' : 'rider.goOnline')}
-        variant={props.isOnline ? 'secondary' : 'primary'}
-        busy={toggle.isPending}
-        onPress={() => toggle.mutate()}
-      />
+      {paused ? (
+        <View role="alert" style={styles.stack}>
+          <Body large strong>
+            {t(locale, 'rider.suspended', { reason: (props.pausedReason ?? '').replace(/[.\s]+$/, '') })}
+          </Body>
+          {order ? <Body large>{t(locale, 'rider.suspendedFinish')}</Body> : null}
+        </View>
+      ) : (
+        <Button
+          label={t(locale, props.isOnline ? 'rider.goOffline' : 'rider.goOnline')}
+          variant={props.isOnline ? 'secondary' : 'primary'}
+          busy={toggle.isPending}
+          onPress={() => toggle.mutate()}
+        />
+      )}
       {toggle.error ? <ErrorState error={toggle.error} onRetry={() => toggle.reset()} /> : null}
       {held.isError && !held.data ? (
         <ErrorState error={held.error} onRetry={() => void held.refetch()} />

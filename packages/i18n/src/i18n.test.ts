@@ -55,6 +55,20 @@ describe('i18n', () => {
     expect(messages.bn['apply.intro']).not.toBe(messages.en['apply.intro']);
   });
 
+  it('has the rider joining strings, with labels staying English in Bangla', () => {
+    expect(t('en', 'rider.suspended', { reason: 'Complaints' })).toBe(
+      'Your account is paused: Complaints. Call Oregano support.',
+    );
+    expect(t('bn', 'rider.rejected', { reason: 'Blurry photo' })).toContain('Blurry photo');
+    expect(t('en', 'join.agencyHint')).toBe('Ask your agency for its 8-letter code.');
+    expect(t('en', 'join.staffHint')).toBe('Your restaurant must add your phone number first.');
+    expect(t('en', 'join.selfieHint')).toBe('A clear photo of your face, no sunglasses.');
+    for (const key of ['join.independent', 'join.next', 'vehicle.motorcycle', 'doc.nidFront', 'join.submit'] as const) {
+      expect(messages.bn[key], key).toBe(messages.en[key]);
+    }
+    expect(messages.bn['join.intro']).not.toBe(messages.en['join.intro']);
+  });
+
   describe('order status words', () => {
     it('tells the customer a ready order is waiting for a rider until one claims it', () => {
       expect(t('en', orderStatusKey('ready', 'customer', false))).toBe('Ready. Waiting for a rider.');

@@ -11,6 +11,8 @@ export const queryKeys = {
   adminOrders: ['orders', 'admin'],
   restaurants: ['restaurants'],
   restaurantApplication: ['restaurant-application'],
+  riderApplication: ['rider-application'],
+  zones: ['zones'],
   staff: (restaurantId: string) => ['staff', restaurantId] as ['staff', string],
   riderInvites: (restaurantId: string) => ['rider-invites', restaurantId] as ['rider-invites', string],
   restaurant: (slug: string) => ['restaurant', slug] as ['restaurant', string],

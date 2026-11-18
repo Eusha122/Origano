@@ -1,10 +1,12 @@
-import { queryKeys, useQueryClient, useSession } from '@oregano/app-core';
-import { Screen } from '@oregano/ui-native';
+import { queryKeys, useApi, useQuery, useQueryClient, useSession } from '@oregano/app-core';
+import { t } from '@oregano/i18n';
+import { Body, Button, Heading, LanguageButton, Screen, useLocale } from '@oregano/ui-native';
 import { ErrorState } from '../components';
-import { RiderScreen, RidersOnly } from '../rider';
+import { JoinScreen } from '../join';
+import { RiderScreen } from '../rider';
 import { SignIn } from '../sign-in';
 
-/** The rider screen is the whole app: sign in, then go online, claim an order and deliver it. */
+/** Sign in, then by where the rider's application stands: join, wait, fix it, work, or paused. */
 export default function Index() {
   const session = useSession();
   const queryClient = useQueryClient();
@@ -22,7 +24,53 @@ export default function Index() {
       </Screen>
     );
   }
-  // Applicants have a rider record too; only an approved rider gets the delivery screen (joining screens: Task 18).
-  if (session.me.rider?.status !== 'approved') return <RidersOnly />;
-  return <RiderScreen isOnline={session.me.rider.isOnline} />;
+  const rider = session.me.rider;
+  if (rider?.status === 'approved') return <RiderScreen isOnline={rider.isOnline} />;
+  return <Applicant status={rider?.status ?? null} />;
+}
+
+/** Everyone who is not an approved rider: a new person, an applicant, or a rider whose account is paused. */
+function Applicant(props: { status: 'applied' | 'under_review' | 'approved' | 'rejected' | 'suspended' | null }) {
+  const { locale } = useLocale();
+  const api = useApi();
+  const session = useSession();
+  const application = useQuery({
+    queryKey: queryKeys.riderApplication,
+    queryFn: () => api.riderApplication(),
+  });
+
+  if (application.isError) {
+    return (
+      <Screen scroll>
+        <Heading>{t(locale, 'apply.rideCta')}</Heading>
+        <LanguageButton />
+        <ErrorState error={application.error} onRetry={() => void application.refetch()} />
+        <Button label={t(locale, 'auth.signOut')} variant="secondary" onPress={() => void session.signOut()} />
+      </Screen>
+    );
+  }
+  if (application.isPending) {
+    return (
+      <Screen>
+        <Heading>{t(locale, 'apply.rideCta')}</Heading>
+      </Screen>
+    );
+  }
+  const view = application.data;
+
+  if (props.status === 'suspended') {
+    // The rider can still finish an order already on the road; the delivery screen shows it, without going online.
+    return <RiderScreen isOnline={false} pausedReason={view?.suspendedReason ?? ''} />;
+  }
+  if (props.status === 'under_review') {
+    return (
+      <Screen scroll>
+        <Heading>{t(locale, 'apply.rideCta')}</Heading>
+        <LanguageButton />
+        <Body large>{t(locale, 'rider.underReview')}</Body>
+        <Button label={t(locale, 'auth.signOut')} variant="secondary" onPress={() => void session.signOut()} />
+      </Screen>
+    );
+  }
+  return <JoinScreen view={view} />;
 }

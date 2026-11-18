@@ -248,4 +248,67 @@ describe('silent refresh', () => {
     await client.logout().catch(() => {});
     expect(store.getAccessToken()).toBeNull();
   });
+
+  it('saveRiderApplication sends a JSON PUT with the bearer token, and zones() is read without a body', async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    const view = {
+      status: 'applied',
+      type: 'independent',
+      zoneId: '3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b9a',
+      agencyName: null,
+      restaurantName: null,
+      details: {
+        type: 'independent',
+        zoneId: '3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b9a',
+        name: 'Jamal Hossain',
+        vehicleType: 'bicycle',
+        vehicleRegistration: null,
+        guarantor: { name: 'Kabir Hossain', phone: '+8801911000555', relation: 'Brother' },
+      },
+      documents: [],
+      missing: ['nid_front', 'nid_back', 'photo'],
+      rejectionReason: null,
+      suspendedReason: null,
+    };
+    const recording: typeof fetch = async (input, init) => {
+      seen.push({ url: String(input), init: init ?? {} });
+      const url = String(input);
+      const body = url.endsWith('/zones') ? { zones: [{ id: view.zoneId, name: 'Chapainawabganj' }] } : view;
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const client = createApiClient({ baseUrl: 'http://api.test', session: storeWith('tok'), fetch: recording });
+    const body = {
+      type: 'independent' as const,
+      zoneId: view.zoneId,
+      name: 'Jamal Hossain',
+      vehicleType: 'bicycle' as const,
+      vehicleRegistration: null,
+      guarantor: { name: 'Kabir Hossain', phone: '01911000555', relation: 'Brother' },
+    };
+    const saved = await client.saveRiderApplication(body);
+    expect(saved.status).toBe('applied');
+    const put = seen[0];
+    expect(put?.url).toBe('http://api.test/v1/onboarding/rider');
+    expect(put?.init.method).toBe('PUT');
+    expect(JSON.parse(String(put?.init.body))).toEqual(body);
+    const headers = put?.init.headers as Record<string, string>;
+    expect(headers.authorization).toBe('Bearer tok');
+    expect(headers['content-type']).toBe('application/json');
+
+    const zones = await client.zones();
+    expect(zones).toEqual([{ id: view.zoneId, name: 'Chapainawabganj' }]);
+    expect(seen[1]?.init.body).toBeUndefined();
+    const getHeaders = (seen[1]?.init.headers ?? {}) as Record<string, string>;
+    expect(getHeaders['content-type']).toBeUndefined();
+  });
+
+  it('riderApplication() turns a 404 into null', async () => {
+    const body = { error: { code: 'not_found', message: 'Not found.', requestId: 'req-1' } };
+    const client = createApiClient({
+      baseUrl: 'http://api.test',
+      session: storeWith('tok'),
+      fetch: fakeFetch(404, body),
+    });
+    expect(await client.riderApplication()).toBeNull();
+  });
 });

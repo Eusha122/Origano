@@ -12,8 +12,11 @@ import {
   RestaurantApplicationView,
   RestaurantDetail,
   RestaurantListResponse,
+  type RiderApplicationBody,
+  RiderApplicationView,
   RiderInvite,
   RiderOffer,
+  RiderZone,
   SessionResponse,
   StaffMember,
 } from '@oregano/contracts';
@@ -109,6 +112,13 @@ export type ApiClient = {
   riderInvites(restaurantId: string): Promise<RiderInvite[]>;
   addRiderInvite(restaurantId: string, phone: string): Promise<RiderInvite>;
   removeRiderInvite(restaurantId: string, phone: string): Promise<void>;
+  /** The areas a rider can apply in. */
+  zones(): Promise<RiderZone[]>;
+  /** The caller's rider application, or null when they have not started one. */
+  riderApplication(): Promise<RiderApplicationView | null>;
+  saveRiderApplication(body: RiderApplicationBody): Promise<RiderApplicationView>;
+  uploadRiderDocument(kind: string, file: UploadFile): Promise<DocumentSummary>;
+  submitRiderApplication(): Promise<RiderApplicationView>;
 };
 
 const Orders = z.object({ orders: z.array(Order) });
@@ -116,6 +126,7 @@ const Offers = z.object({ offers: z.array(RiderOffer) });
 const AdminOrders = z.object({ orders: z.array(AdminOrderRow) });
 const Staff = z.object({ members: z.array(StaffMember) });
 const RiderInvites = z.object({ invites: z.array(RiderInvite) });
+const Zones = z.object({ zones: z.array(RiderZone) });
 
 type Request = {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -365,6 +376,18 @@ export function createApiClient(opts: {
     addRiderInvite: (restaurantId, phone) =>
       post(RiderInvite, `/v1/restaurant/${id(restaurantId)}/rider-invites`, { phone }),
     removeRiderInvite: (restaurantId, phone) => remove(`/v1/restaurant/${id(restaurantId)}/rider-invites/${id(phone)}`),
+    zones: async () => (await get(Zones, '/v1/zones')).zones,
+    riderApplication: async () => {
+      try {
+        return await get(RiderApplicationView, '/v1/onboarding/rider');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    saveRiderApplication: (body) => put(RiderApplicationView, '/v1/onboarding/rider', body),
+    uploadRiderDocument: (kind, file) => upload(DocumentSummary, `/v1/onboarding/rider/documents/${id(kind)}`, file),
+    submitRiderApplication: () => post(RiderApplicationView, '/v1/onboarding/rider/submit'),
   };
 }
 
