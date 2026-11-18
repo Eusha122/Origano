@@ -98,6 +98,8 @@ export const en = {
   'error.otpRateLimited': 'Too many codes asked for. Try again later.',
   'error.otpLocked': 'Too many wrong tries on this number. Try again tomorrow, or contact Oregano support.',
   'error.smsUnavailable': 'We could not send a code right now. Try again in a few minutes.',
+  'error.rateLimited': 'Too many requests. Wait a minute and try again.',
+  'error.tooManyOpenOrders': 'You have too many orders in progress. Wait for one to arrive, then order again.',
   'sms.otp': 'Your Oregano code is {code}. It expires in 5 minutes. Never share it.',
 } as const;
 

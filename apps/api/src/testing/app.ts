@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { normalizeBdPhone } from '@oregano/domain';
 import type { FastifyInstance } from 'fastify';
+import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp } from '../app';
 import { type Limits, loadConfig, type SessionLimits } from '../config';
@@ -64,12 +65,19 @@ export function withTestApp(
     },
   };
   const hub = options.realtime ? new RealtimeHub(config.redisUrl) : undefined;
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+  });
+  redis.on('error', () => {});
 
   beforeAll(async () => {
+    // The limits fail open until Redis is connected, so a test must not start before it is.
+    if (redis.status !== 'ready') await new Promise<void>((resolve) => redis.once('ready', () => resolve()));
     instance = await buildApp({
       config,
       checks: [],
-      services: { db, sms: { keys: config.dataKeys, retainUntilExpiry: true }, realtime: hub },
+      services: { db, sms: { keys: config.dataKeys, retainUntilExpiry: true }, redis, realtime: hub },
     });
     if (hub) {
       await hub.start();
@@ -84,6 +92,7 @@ export function withTestApp(
   afterAll(async () => {
     await instance?.close();
     await hub?.stop();
+    redis.disconnect();
   });
 
   const app = (): FastifyInstance => {

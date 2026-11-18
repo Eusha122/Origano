@@ -233,3 +233,31 @@ describe('realtime access token expiry', () => {
     expect(await closed).toBe(4401);
   }, 10_000);
 });
+
+describe('realtime connection cap', () => {
+  const t = withTestApp({ realtime: true, limits: { wsConnectionsPerIp: 2 } });
+  const url = (): string => `ws://127.0.0.1:${(t.app().server.address() as AddressInfo).port}/v1/realtime`;
+  const opened = (ws: WebSocket): Promise<void> => new Promise((resolve) => ws.once('open', () => resolve()));
+  const closed = (ws: WebSocket): Promise<number> => new Promise((resolve) => ws.once('close', (c) => resolve(c)));
+
+  it('closes a third connection from one address with 4429, and allows one again when another closes', async () => {
+    const a = new WebSocket(url());
+    const b = new WebSocket(url());
+    await Promise.all([opened(a), opened(b)]);
+    const third = new WebSocket(url());
+    expect(await closed(third)).toBe(4429);
+    const aClosed = closed(a);
+    a.close();
+    await aClosed;
+    const again = new WebSocket(url());
+    await opened(again);
+    let code: number | null = null;
+    again.once('close', (c) => {
+      code = c;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(code).toBeNull();
+    again.close();
+    b.close();
+  });
+});

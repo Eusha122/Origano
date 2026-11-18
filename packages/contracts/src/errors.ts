@@ -9,6 +9,8 @@ export const ERROR_CODES = [
   'otp_rate_limited',
   'otp_locked',
   'sms_unavailable',
+  'rate_limited',
+  'too_many_open_orders',
   'unauthenticated',
   'invalid_location',
   'idempotency_key_required',

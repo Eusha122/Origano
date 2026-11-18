@@ -1,4 +1,5 @@
 import { type Me, OnlineBody, type Order, type RiderOffer } from '@oregano/contracts';
+import { TERMINAL_STATUSES } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Services } from '../app';
@@ -33,7 +34,10 @@ export function dispatchRoutes(app: FastifyInstance, { db }: Services): void {
     const user = requireRole(request, 'rider');
     const rows = await db.execute<{ id: string }>(sql`
       SELECT id FROM orders
-      WHERE rider_id = ${user.id} AND status NOT IN ('delivered', 'rejected', 'cancelled', 'expired', 'undeliverable')
+      WHERE rider_id = ${user.id} AND status NOT IN (${sql.join(
+        TERMINAL_STATUSES.map((status) => sql`${status}`),
+        sql`, `,
+      )})
       ORDER BY created_at ASC, number ASC`);
     return {
       orders: await loadOrders(

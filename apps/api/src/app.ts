@@ -3,6 +3,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import Fastify, { type FastifyInstance } from 'fastify';
+import type { Redis } from 'ioredis';
 import { adminRoutes } from './admin/routes';
 import { catalogRoutes } from './catalog/routes';
 import type { Config } from './config';
@@ -18,10 +19,12 @@ import { authenticateAccess } from './identity/sessions';
 import type { SmsDeps } from './notifications/sms/queue';
 import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
+import { hashIp, subkey } from './security/crypto';
+import { registerRateLimits } from './security/rate-limit';
 
 export type { ReadinessCheck } from './health/routes';
 
-export type Services = { db: Db; sms: SmsDeps; realtime?: RealtimeHub };
+export type Services = { db: Db; sms: SmsDeps; redis: Redis; realtime?: RealtimeHub };
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -111,19 +114,25 @@ export async function buildApp(deps: {
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
     // The apps quote the request id when something fails, so the browser must let them read it.
-    exposedHeaders: ['x-request-id'],
+    exposedHeaders: ['x-request-id', 'retry-after'],
   });
 
   healthRoutes(app, deps.checks);
 
   const { services, config } = deps;
   if (services) {
+    await registerRateLimits(app, {
+      redis: services.redis,
+      limits: config.limits,
+      prefix: config.rateLimitPrefix,
+      otpSecret: config.otpSecret,
+    });
     registerAuth(app, services.db);
     await app.register(
       async (v1) => {
         identityRoutes(v1, config, services);
         catalogRoutes(v1, services);
-        orderRoutes(v1, services);
+        orderRoutes(v1, config, services);
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);
         adminRoutes(v1, services);
@@ -132,6 +141,12 @@ export async function buildApp(deps: {
       { prefix: '/v1' },
     );
   }
-  if (services?.realtime) services.realtime.register(app, (token) => authenticateAccess(services.db, token));
+  if (services?.realtime) {
+    const ipKey = subkey(config.otpSecret, 'ip-hash');
+    services.realtime.register(app, (token) => authenticateAccess(services.db, token), {
+      maxPerIp: config.limits.wsConnectionsPerIp,
+      clientKey: (ip) => hashIp(ipKey, ip),
+    });
+  }
   return app;
 }

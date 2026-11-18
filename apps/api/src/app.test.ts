@@ -130,7 +130,7 @@ describe('api skeleton', () => {
     const app = await buildApp({ config: { ...config, corsOrigins: ['http://localhost:8081'] }, checks: [pass] });
     const res = await app.inject({ method: 'GET', url: '/healthz', headers: { origin: 'http://localhost:8081' } });
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:8081');
-    expect(res.headers['access-control-expose-headers']).toBe('x-request-id');
+    expect(res.headers['access-control-expose-headers']).toBe('x-request-id, retry-after');
   });
 });
 

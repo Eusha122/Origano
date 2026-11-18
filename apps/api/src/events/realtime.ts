@@ -47,6 +47,8 @@ export class RealtimeHub {
   private subscriber: Redis | undefined;
   private readonly connections = new Set<Connection>();
   private readonly sockets = new Set<WebSocket>();
+  /** Open connections per client address, for the cap. */
+  private readonly perClient = new Map<string, number>();
   /** Sessions revoked in the last minute, for a socket whose authentication was already under way. */
   private readonly recentlyRevoked = new Map<string, number>();
 
@@ -122,10 +124,27 @@ export class RealtimeHub {
     socket.send(JSON.stringify(message));
   }
 
-  register(app: FastifyInstance, authenticate: (token: string) => ReturnType<typeof authenticateAccess>): void {
+  register(
+    app: FastifyInstance,
+    authenticate: (token: string) => ReturnType<typeof authenticateAccess>,
+    caps: { maxPerIp: number; clientKey: (ip: string) => string },
+  ): void {
     app.register(async (scope) => {
       await scope.register(websocket, { options: { maxPayload: 4096 } });
-      scope.get('/v1/realtime', { websocket: true }, (socket) => {
+      scope.get('/v1/realtime', { websocket: true }, (socket, request) => {
+        // One address may hold only so many connections to this API instance.
+        const client = caps.clientKey(request.ip);
+        const open = this.perClient.get(client) ?? 0;
+        if (open >= caps.maxPerIp) {
+          socket.close(4429, 'too many connections');
+          return;
+        }
+        this.perClient.set(client, open + 1);
+        socket.once('close', () => {
+          const left = (this.perClient.get(client) ?? 1) - 1;
+          if (left <= 0) this.perClient.delete(client);
+          else this.perClient.set(client, left);
+        });
         this.sockets.add(socket);
         let state: 'waiting' | 'authenticating' | 'ready' = 'waiting';
         let connection: Connection | undefined;

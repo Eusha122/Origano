@@ -8,6 +8,7 @@ import {
   orderTotals,
   type ReadyMinutes,
   type RejectReason,
+  TERMINAL_STATUSES,
   transition,
 } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
@@ -32,7 +33,32 @@ const EVENT_NAMES: Record<OrderEvent, string> = {
 };
 
 /** Places an order inside the caller's transaction (see `withIdempotency`). Prices come only from the database. */
-export async function placeOrderIn(tx: Tx, customer: AuthUser, body: PlaceOrderBody): Promise<{ orderId: string }> {
+/**
+ * Most orders in progress one customer may have. Taken under a lock per customer, so several orders placed
+ * at the same moment cannot all see the old count. A replayed request never reaches this: it is answered
+ * from the stored response before any work is done.
+ */
+async function assertUnderOpenOrderLimit(tx: Tx, customerId: string, limit: number): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`orders:${customerId}`}))`);
+  const rows = await tx.execute<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM orders
+    WHERE customer_id = ${customerId}
+      AND status NOT IN (${sql.join(
+        TERMINAL_STATUSES.map((status) => sql`${status}`),
+        sql`, `,
+      )})`);
+  if ((rows[0]?.n ?? 0) >= limit) {
+    throw new AppError('too_many_open_orders', 409, 'You have too many orders in progress.');
+  }
+}
+
+export async function placeOrderIn(
+  tx: Tx,
+  customer: AuthUser,
+  body: PlaceOrderBody,
+  openOrderLimit: number,
+): Promise<{ orderId: string }> {
+  await assertUnderOpenOrderLimit(tx, customer.id, openOrderLimit);
   const restaurant = await getRestaurantForOrder(tx, body.restaurantId);
   if (!restaurant) throw new AppError('not_found', 404, 'Not found.');
   if (!restaurant.isOpen) throw new AppError('restaurant_closed', 422, 'This restaurant is closed right now.');
@@ -99,10 +125,6 @@ export async function placeOrderIn(tx: Tx, customer: AuthUser, body: PlaceOrderB
     status: 'placed',
   });
   return { orderId };
-}
-
-export function placeOrder(db: Db, customer: AuthUser, body: PlaceOrderBody): Promise<{ orderId: string }> {
-  return db.transaction((tx) => placeOrderIn(tx, customer, body));
 }
 
 type LockedOrder = {

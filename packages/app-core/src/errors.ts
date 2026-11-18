@@ -15,6 +15,8 @@ const KEYS: Record<ErrorCode, MessageKey> = {
   otp_rate_limited: 'error.otpRateLimited',
   otp_locked: 'error.otpLocked',
   sms_unavailable: 'error.smsUnavailable',
+  rate_limited: 'error.rateLimited',
+  too_many_open_orders: 'error.tooManyOpenOrders',
   unauthenticated: 'error.generic',
   invalid_location: 'error.generic',
   idempotency_key_required: 'error.generic',
