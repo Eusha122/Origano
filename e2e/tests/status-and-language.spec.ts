@@ -54,19 +54,21 @@ test('a ready order with no rider yet says it is waiting for one; the rider read
 });
 
 for (const app of [
-  { name: 'restaurant', url: APP_URLS.restaurant, phone: PHONES.owner, title: 'Orders', titleBn: 'অর্ডার' },
-  { name: 'rider', url: APP_URLS.rider, phone: PHONES.rider, title: 'Deliveries', titleBn: 'ডেলিভারি' },
+  { name: 'restaurant', url: APP_URLS.restaurant, phone: PHONES.owner, title: 'Orders' },
+  { name: 'rider', url: APP_URLS.rider, phone: PHONES.rider, title: 'Deliveries' },
 ] as const) {
   test(`the ${app.name} app switches to Bangla before and after signing in`, async ({ browser, request }) => {
     const page = await openApp(browser, app.url);
     await page.getByRole('button', { name: 'বাংলা', exact: true }).click();
-    await expect(page.getByRole('heading', { name: app.titleBn, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'English', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'English', exact: true }).click();
-    await expect(page.getByRole('heading', { name: app.title, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'বাংলা', exact: true })).toBeVisible();
 
     await signInWithForm(page, request, app.phone);
     await page.getByRole('button', { name: 'বাংলা', exact: true }).click();
-    await expect(page.getByRole('heading', { name: app.titleBn, exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'লগ আউট', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'English', exact: true })).toBeVisible();
+    // Headings and buttons stay English in Bangla mode.
+    await expect(page.getByRole('heading', { name: app.title, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Log out', exact: true })).toBeVisible();
   });
 }

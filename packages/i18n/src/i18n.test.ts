@@ -1,6 +1,6 @@
 import { ORDER_STATUSES, taka } from '@oregano/domain';
 import { describe, expect, it } from 'vitest';
-import { formatMoney, messages, orderStatusKey, t, toBanglaDigits } from './index';
+import { formatMoney, messages, orderStatusKey, t } from './index';
 
 describe('i18n', () => {
   it('has exactly the same keys in English and Bangla', () => {
@@ -24,8 +24,8 @@ describe('i18n', () => {
 
   it('has the Plan 02 strings with their placeholders', () => {
     expect(t('en', 'cart.viewCart', { count: 2, total: 'Tk 560' })).toBe('2 items · Tk 560 — View cart');
-    expect(t('bn', 'order.number', { number: '১২' })).toBe('অর্ডার #১২');
-    expect(t('bn', 'rider.collectCash', { amount: '৳৯৬০' })).toBe('৳৯৬০ নিন');
+    expect(t('bn', 'order.number', { number: 12 })).toBe('Order #12');
+    expect(t('bn', 'rider.collectCash', { amount: 'Tk 960' })).toBe('Collect Tk 960');
   });
 
   it('has the fix-wave strings', () => {
@@ -71,21 +71,22 @@ describe('i18n', () => {
     expect(() => t('en', 'restaurant.opensAt')).toThrow(/time/);
   });
 
-  it('converts digits to Bangla', () => {
-    expect(toBanglaDigits('280')).toBe('২৮০');
-    expect(toBanglaDigits('Tk 1,050')).toBe('Tk ১,০৫০');
+  it('keeps buttons and labels English in Bangla mode, and plain sentences Bangla', () => {
+    for (const key of ['action.placeOrder', 'auth.signOut', 'cart.add', 'checkout.total', 'rider.title'] as const) {
+      expect(t('bn', key), key).toBe(t('en', key));
+    }
+    expect(t('bn', 'cart.empty')).not.toBe(t('en', 'cart.empty'));
+    expect(t('bn', 'error.generic')).not.toBe(t('en', 'error.generic'));
   });
 
-  it('formats money as the book specifies', () => {
-    expect(formatMoney(taka(280), 'en')).toBe('Tk 280');
-    expect(formatMoney(taka(280), 'bn')).toBe('৳২৮০');
-    expect(formatMoney(taka(0), 'en')).toBe('Tk 0');
+  it('formats money as Tk in every language', () => {
+    expect(formatMoney(taka(280))).toBe('Tk 280');
+    expect(formatMoney(taka(0))).toBe('Tk 0');
   });
 
   it('groups large amounts and shows poisha only when present', () => {
-    expect(formatMoney(taka(20000), 'en')).toBe('Tk 20,000');
-    expect(formatMoney(taka(20000), 'bn')).toBe('৳২০,০০০');
-    expect(formatMoney(taka(150000), 'en')).toBe('Tk 1,50,000');
-    expect(formatMoney(taka(15.5), 'en')).toBe('Tk 15.50');
+    expect(formatMoney(taka(20000))).toBe('Tk 20,000');
+    expect(formatMoney(taka(150000))).toBe('Tk 1,50,000');
+    expect(formatMoney(taka(15.5))).toBe('Tk 15.50');
   });
 });

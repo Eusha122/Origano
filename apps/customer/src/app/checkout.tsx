@@ -112,7 +112,7 @@ export default function Checkout() {
       {cart.lines.map((l) => (
         <View key={l.menuItemId} style={styles.row}>
           <Body>{quantityLine(l.quantity, pick(locale, l.nameEn, l.nameBn))}</Body>
-          <Body>{formatMoney(poisha(l.price * l.quantity), locale)}</Body>
+          <Body>{formatMoney(poisha(l.price * l.quantity))}</Body>
         </View>
       ))}
       <TextField label={t(locale, 'checkout.address')} value={address} onChangeText={setAddress} error={addressError} />
@@ -133,7 +133,7 @@ export default function Checkout() {
       <TextField label={t(locale, 'checkout.note')} value={note} onChangeText={setNote} />
       <View style={styles.row}>
         <Body>{t(locale, 'checkout.subtotal')}</Body>
-        <Body>{formatMoney(cart.subtotal, locale)}</Body>
+        <Body>{formatMoney(cart.subtotal)}</Body>
       </View>
       {restaurants.isError ? <ErrorState error={restaurants.error} onRetry={() => void restaurants.refetch()} /> : null}
       {outsideZone ? <Body>{t(locale, 'zone.outside')}</Body> : null}
@@ -142,11 +142,11 @@ export default function Checkout() {
         <>
           <View style={styles.row}>
             <Body>{t(locale, 'checkout.deliveryFee')}</Body>
-            <Body>{formatMoney(poisha(fee), locale)}</Body>
+            <Body>{formatMoney(poisha(fee))}</Body>
           </View>
           <View style={styles.row}>
             <Body strong>{t(locale, 'checkout.total')}</Body>
-            <Body strong>{formatMoney(total, locale)}</Body>
+            <Body strong>{formatMoney(total)}</Body>
           </View>
         </>
       ) : null}
@@ -168,7 +168,7 @@ export default function Checkout() {
         label={
           total === null
             ? t(locale, 'action.placeOrder')
-            : t(locale, 'checkout.placeOrder', { total: formatMoney(total, locale) })
+            : t(locale, 'checkout.placeOrder', { total: formatMoney(total) })
         }
         disabled={total === null}
         busy={place.isPending}

@@ -36,16 +36,16 @@ export default function OrderTracking() {
           {data.items.map((item) => (
             <View key={item.menuItemId} style={styles.row}>
               <Body>{quantityLine(item.quantity, pick(locale, item.nameEn, item.nameBn))}</Body>
-              <Body>{formatMoney(poisha(item.lineTotal), locale)}</Body>
+              <Body>{formatMoney(poisha(item.lineTotal))}</Body>
             </View>
           ))}
           <View style={styles.row}>
             <Body>{t(locale, 'checkout.deliveryFee')}</Body>
-            <Body>{formatMoney(poisha(data.deliveryFee), locale)}</Body>
+            <Body>{formatMoney(poisha(data.deliveryFee))}</Body>
           </View>
           <View style={styles.row}>
             <Body strong>{t(locale, 'checkout.total')}</Body>
-            <Body strong>{formatMoney(poisha(data.total), locale)}</Body>
+            <Body strong>{formatMoney(poisha(data.total))}</Body>
           </View>
           <Body muted>{t(locale, 'checkout.cash')}</Body>
           <Body muted>{[data.delivery.addressLine, data.delivery.landmark].join(', ')}</Body>

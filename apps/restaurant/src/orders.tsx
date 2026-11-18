@@ -92,7 +92,7 @@ function OrderCard(props: { order: Order }) {
         </Body>
       ) : null}
       <Body large strong>
-        {formatMoney(poisha(order.total), locale)}
+        {formatMoney(poisha(order.total))}
       </Body>
       <Body large muted>
         {t(locale, 'checkout.cash')}

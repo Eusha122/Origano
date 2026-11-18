@@ -10,16 +10,16 @@ import {
 } from '@oregano/app-core';
 import type { Order, RiderOffer } from '@oregano/contracts';
 import { isTerminal, poisha } from '@oregano/domain';
-import { formatMoney, type Locale, t, toBanglaDigits } from '@oregano/i18n';
+import { formatMoney, type Locale, t } from '@oregano/i18n';
 import { colors, layout } from '@oregano/ui';
 import { Body, Button, Heading, LanguageButton, Screen, StatusLine, useLocale } from '@oregano/ui-native';
 import { Linking, StyleSheet, View } from 'react-native';
 import { ErrorState } from './components';
 
-/** "1.2 km away" in English digits or Bangla digits. */
+/** "1.2 km away". */
 function distanceText(km: number, locale: Locale): string {
   const value = km.toFixed(1);
-  return t(locale, 'rider.distance', { km: locale === 'bn' ? toBanglaDigits(value) : value });
+  return t(locale, 'rider.distance', { km: value });
 }
 
 /** A signed-in person who is not an approved rider gets a plain message and a way out. */
@@ -144,7 +144,7 @@ function OfferCard(props: { offer: RiderOffer; busy: boolean; onClaim: () => voi
       </Body>
       <Body large>{distanceText(offer.distanceKm, locale)}</Body>
       <Body large strong>
-        {formatMoney(poisha(offer.deliveryFee), locale)}
+        {formatMoney(poisha(offer.deliveryFee))}
       </Body>
       <Button label={t(locale, 'rider.claim')} busy={props.busy} onPress={props.onClaim} />
     </View>
@@ -186,7 +186,7 @@ function HeldOrder(props: { order: Order }) {
       {order.status === 'on_the_way' ? (
         <>
           <Body large strong>
-            {t(locale, 'rider.collectCash', { amount: formatMoney(poisha(order.total), locale) })}
+            {t(locale, 'rider.collectCash', { amount: formatMoney(poisha(order.total)) })}
           </Body>
           <Button label={t(locale, 'rider.delivered')} busy={deliver.isPending} onPress={() => deliver.mutate()} />
         </>

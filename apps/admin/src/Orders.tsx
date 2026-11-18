@@ -32,7 +32,7 @@ function Row(props: { order: AdminOrderRow }) {
       <td>{order.restaurantNameEn}</td>
       <td>{order.customerPhone}</td>
       <td>{order.riderName ? `${order.riderName} ${order.riderPhone ?? ''}`.trim() : '—'}</td>
-      <td>{formatMoney(poisha(order.total), 'en')}</td>
+      <td>{formatMoney(poisha(order.total))}</td>
       <td>{placedAt(order.createdAt)}</td>
     </tr>
   );

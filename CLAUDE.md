@@ -75,8 +75,8 @@ Oregano-Logo-Kit/ Official logo artwork: always use these files
 - Packages are named `@oregano/<name>`.
 - Money is an integer number of poisha (1 Tk = 100 poisha), typed `Money` from `@oregano/domain`. Never a float or a string.
 - Percentages of money round half up to the nearest whole taka.
-- Prices display as `Tk 280` in English and `৳২৮০` in Bangla. Use `formatMoney` from `@oregano/i18n`.
-- Every user-facing string exists in English and Bangla. UI copy is sentence case.
+- Prices display as `Tk 280` in both languages, with Western digits. Use `formatMoney` from `@oregano/i18n`.
+- Plain-language text (status messages, errors, hints, greetings, empty states) exists in English and Bangla. Buttons, field labels, prices, numbers, and data from restaurants (restaurant, menu and street names, addresses) stay English in both languages and are never translated; for those message keys the Bangla entry repeats the English text so `t()` stays complete. UI copy is sentence case. (Changed 18 November 2026 at the founder's request; the book's "full Bangla" is narrowed to this.)
 - Colours, fonts, sizes and radii come from `@oregano/ui`; no literal hex values or pixel sizes in screens. Text colours only from `textPairs`.
 - Never retype the logo in a font. Use the files in `Oregano-Logo-Kit/`.
 - Write the failing test first. Database tests run against real PostgreSQL, never a mock.
