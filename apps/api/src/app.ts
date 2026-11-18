@@ -83,6 +83,7 @@ export async function buildApp(deps: {
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
+      if (error.retryAfterSeconds !== undefined) reply.header('retry-after', String(error.retryAfterSeconds));
       return reply
         .code(error.statusCode)
         .send({ error: { code: error.code, message: error.message, requestId: request.id } });

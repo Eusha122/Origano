@@ -43,6 +43,13 @@
       "when": 1794995652613,
       "tag": "0005_exotic_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794996150751,
+      "tag": "0006_crazy_bloodaxe",
+      "breakpoints": true
     }
   ]
 }

@@ -53,7 +53,7 @@ export type Limits = {
   readonly staffPerRestaurant: number;
 };
 
-/** The blueprint section 7 table. Times and the per-code attempt cap are never scaled. */
+/** The blueprint section 7 table. The code lifetime and the per-code attempt cap are never scaled. */
 const STANDARD_LIMITS: Limits = {
   otpTtlSeconds: 300,
   otpResendSeconds: 60,
@@ -77,13 +77,17 @@ const STANDARD_LIMITS: Limits = {
   staffPerRestaurant: 20,
 };
 
-const UNSCALED: ReadonlySet<string> = new Set(['otpTtlSeconds', 'otpResendSeconds', 'otpMaxAttempts']);
+const UNSCALED: ReadonlySet<string> = new Set(['otpTtlSeconds', 'otpMaxAttempts']);
 
 function limitsFor(profile: 'standard' | 'relaxed'): Limits {
   if (profile === 'standard') return STANDARD_LIMITS;
-  return Object.fromEntries(
-    Object.entries(STANDARD_LIMITS).map(([name, value]) => [name, UNSCALED.has(name) ? value : value * 100]),
-  ) as Limits;
+  // Relaxed (local development and browser tests only): counts x100, and no resend gap, so a demo phone can sign in repeatedly.
+  return {
+    ...(Object.fromEntries(
+      Object.entries(STANDARD_LIMITS).map(([name, value]) => [name, UNSCALED.has(name) ? value : value * 100]),
+    ) as Limits),
+    otpResendSeconds: 0,
+  };
 }
 
 export class ConfigError extends Error {

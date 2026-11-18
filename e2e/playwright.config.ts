@@ -11,6 +11,8 @@ const serverEnv = {
   REDIS_URL: E2E_REDIS_URL,
   OTP_SECRET,
   DATA_KEYS,
+  // The journeys sign the same demo phones in many times from one address; production refuses this setting.
+  LIMITS_PROFILE: 'relaxed',
   LOG_LEVEL: 'warn',
 };
 

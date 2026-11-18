@@ -1,7 +1,11 @@
 import { TEAM_ROLES } from '@oregano/domain';
 import { z } from 'zod';
 
-export const OtpRequestBody = z.object({ phone: z.string().trim().min(1).max(30) });
+export const OtpRequestBody = z.object({
+  phone: z.string().trim().min(1).max(30),
+  /** The language of the SMS. */
+  locale: z.enum(['en', 'bn']).optional(),
+});
 export type OtpRequestBody = z.infer<typeof OtpRequestBody>;
 
 export const OtpRequestResponse = z.object({

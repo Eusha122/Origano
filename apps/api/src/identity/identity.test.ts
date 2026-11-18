@@ -19,7 +19,8 @@ describe('sign-in by OTP', () => {
   it('signs a new customer in with the code that was sent', async () => {
     const requested = await post(t, '/v1/auth/otp/request', { phone: '017 1100 0099' });
     expect(requested.statusCode).toBe(202);
-    expect(requested.json()).toEqual({ expiresInSeconds: 300, resendInSeconds: 60 });
+    // The harness runs the relaxed profile, which has no resend gap; otp-limits.test.ts pins 60.
+    expect(requested.json()).toEqual({ expiresInSeconds: 300, resendInSeconds: 0 });
 
     const code = await t.otp.last('+8801711000099');
     expect(code).toMatch(/^[0-9]{6}$/);

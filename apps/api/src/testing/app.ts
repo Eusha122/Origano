@@ -25,7 +25,7 @@ export function withTestApp(
   app: () => FastifyInstance;
   db: Db;
   /** The sign-in code in the newest queued SMS for a phone. */
-  otp: { last(phone: string): Promise<string | undefined> };
+  otp: { last(phone: string): Promise<string | undefined>; lastText(phone: string): Promise<string | null> };
   demo: () => DemoIds;
   signIn: (phone: string) => Promise<string>;
   as: (token: string) => { authorization: string };
@@ -46,6 +46,10 @@ export function withTestApp(
   let instance: FastifyInstance | undefined;
   let ids: DemoIds | undefined;
   const otp = {
+    lastText: async (phone: string): Promise<string | null> => {
+      const normalised = normalizeBdPhone(phone);
+      return normalised ? peekLatestOtpText(db, config.dataKeys, normalised) : null;
+    },
     last: async (phone: string): Promise<string | undefined> => {
       const normalised = normalizeBdPhone(phone);
       const text = normalised ? await peekLatestOtpText(db, config.dataKeys, normalised) : null;

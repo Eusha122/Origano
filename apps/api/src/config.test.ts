@@ -156,13 +156,14 @@ describe('production refusals', () => {
 });
 
 describe('limits', () => {
-  it('multiplies counts by 100 in the relaxed profile but keeps times and the attempt cap', () => {
+  it('multiplies counts by 100 and drops the resend gap in the relaxed profile, but keeps the code lifetime and attempt cap', () => {
     const standard = loadConfig(valid).limits;
     const relaxed = loadConfig({ ...valid, LIMITS_PROFILE: 'relaxed' }).limits;
     expect(standard.otpSendsPerPhoneHour).toBe(5);
     expect(relaxed.otpSendsPerPhoneHour).toBe(500);
     expect(relaxed.otpTtlSeconds).toBe(standard.otpTtlSeconds);
-    expect(relaxed.otpResendSeconds).toBe(standard.otpResendSeconds);
+    expect(standard.otpResendSeconds).toBe(60);
+    expect(relaxed.otpResendSeconds).toBe(0);
     expect(relaxed.otpMaxAttempts).toBe(5);
   });
 
