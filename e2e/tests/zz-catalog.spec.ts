@@ -12,7 +12,19 @@ import {
   signInWithForm,
 } from '../journey';
 
+// This file runs last on purpose: its order stays in the admin's list, and the other journeys count orders and zones.
 test.afterEach(closeApps);
+
+/** Zones cannot be deleted, so the zone this file draws is switched off: riders and customers see only active zones. */
+test.afterEach(async ({ request }) => {
+  const token = await signInWithApi(request, PHONES.admin);
+  const zones = (await (await request.get(`${API_URL}/v1/admin/zones`, { headers: bearer(token) })).json()) as {
+    zones: { id: string; slug: string; isActive: boolean }[];
+  };
+  for (const zone of zones.zones.filter((z) => z.slug === 'rajshahi' && z.isActive)) {
+    await request.patch(`${API_URL}/v1/admin/zones/${zone.id}`, { headers: bearer(token), data: { isActive: false } });
+  }
+});
 
 // This is the first journey to open the restaurant app, so a cold start pays for its first bundle.
 test.describe.configure({ timeout: 240_000 });
