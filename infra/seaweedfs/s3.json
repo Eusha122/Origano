@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "oregano",
+      "credentials": [{ "accessKey": "oregano", "secretKey": "oregano-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

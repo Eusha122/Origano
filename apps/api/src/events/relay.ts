@@ -15,11 +15,11 @@ export function relayOnce(
   batchSize = 100,
 ): Promise<number> {
   return db.transaction(async (tx) => {
-    const rows = await tx.execute<{ id: string; payload: unknown }>(
-      sql`SELECT id, payload FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`,
+    const rows = await tx.execute<{ id: string; topic: string; payload: unknown }>(
+      sql`SELECT id, topic, payload FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`,
     );
     if (rows.length === 0) return 0;
-    for (const row of rows) await publish(EVENTS_CHANNEL, JSON.stringify(row.payload));
+    for (const row of rows) await publish(EVENTS_CHANNEL, JSON.stringify({ topic: row.topic, payload: row.payload }));
     const ids = rows.map((row) => row.id);
     await tx.execute(sql`UPDATE outbox SET published_at = now() WHERE id IN (${sql.join(ids, sql`, `)})`);
     return rows.length;

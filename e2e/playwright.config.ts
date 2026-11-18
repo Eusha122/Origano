@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
-import { API_URL, APP_URLS, E2E_DATABASE_URL, E2E_REDIS_URL } from './journey';
+import { API_URL, APP_URLS, E2E_DATABASE_URL, E2E_REDIS_URL, E2E_S3_ENDPOINT } from './journey';
 
 const OTP_SECRET = 'e2e-only-otp-secret-0123456789abcdef';
+const DATA_KEYS = 'e2e1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';
 
 /** What both the API and the worker read: the e2e database, local Redis, a throwaway OTP secret. */
 const serverEnv = {
@@ -9,6 +10,11 @@ const serverEnv = {
   DATABASE_URL: E2E_DATABASE_URL,
   REDIS_URL: E2E_REDIS_URL,
   OTP_SECRET,
+  DATA_KEYS,
+  S3_ENDPOINT: E2E_S3_ENDPOINT,
+  S3_BUCKET: 'oregano-e2e',
+  // The journeys sign the same demo phones in many times from one address; production refuses this setting.
+  LIMITS_PROFILE: 'relaxed',
   LOG_LEVEL: 'warn',
 };
 

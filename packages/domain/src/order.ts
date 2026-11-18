@@ -59,7 +59,10 @@ const TRANSITIONS: readonly Row[] = [
   { from: 'on_the_way', event: 'cancel', actor: 'admin', to: 'cancelled', types: BOTH },
 ];
 
-const TERMINAL: ReadonlySet<OrderStatus> = new Set(['delivered', 'rejected', 'cancelled', 'expired', 'undeliverable']);
+/** Statuses an order never leaves. */
+export const TERMINAL_STATUSES = ['delivered', 'rejected', 'cancelled', 'expired', 'undeliverable'] as const;
+
+const TERMINAL: ReadonlySet<OrderStatus> = new Set(TERMINAL_STATUSES);
 
 export function isTerminal(status: OrderStatus): boolean {
   return TERMINAL.has(status);

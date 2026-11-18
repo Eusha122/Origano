@@ -1,8 +1,9 @@
+import { Redis } from 'ioredis';
 import { buildApp } from './app';
 import { type Config, ConfigError, loadConfig } from './config';
 import { createDb, postgresCheck, redisCheck } from './db/client';
 import { RealtimeHub } from './events/realtime';
-import { LoggingOtpSender } from './identity/otp';
+import { openStore } from './media/store';
 
 async function main(): Promise<void> {
   let config: Config;
@@ -17,13 +18,24 @@ async function main(): Promise<void> {
   }
 
   const { db, close } = createDb(config.databaseUrl);
-  // The sender logs through the app's logger, which exists only after buildApp returns.
-  const otpSender = new LoggingOtpSender({ info: (message) => app.log.info(message) }, config.devOtpPeek);
+  // Fails at once when Redis is down (no offline queue), so the limits fail open instead of slowing every request.
+  const limitsRedis = new Redis(config.redisUrl, {
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    commandTimeout: 2000,
+  });
+  limitsRedis.on('error', () => {});
   const realtime = new RealtimeHub(config.redisUrl);
   const app = await buildApp({
     config,
     checks: [postgresCheck(db), redisCheck(config.redisUrl)],
-    services: { db, otpSender, realtime },
+    services: {
+      db,
+      sms: { keys: config.dataKeys, retainUntilExpiry: config.devOtpPeek },
+      redis: limitsRedis,
+      store: await openStore(config),
+      realtime,
+    },
   });
 
   let shuttingDown = false;
@@ -33,6 +45,7 @@ async function main(): Promise<void> {
     try {
       await app.close();
       await realtime.stop();
+      limitsRedis.disconnect();
       await close();
       process.exit(0);
     } catch (error) {

@@ -1,37 +1,11 @@
-import { ApiError } from '@oregano/app-core';
-import { type Locale, type MessageKey, t } from '@oregano/i18n';
+import { errorMessageKey as errorKey } from '@oregano/app-core';
+import { type Locale, t } from '@oregano/i18n';
 import { colors, layout } from '@oregano/ui';
 import { Body, Button, useLocale } from '@oregano/ui-native';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-/** The words for a failure: offline and the few refusals a customer can act on; anything else is generic. */
-export function errorKey(error: unknown): MessageKey {
-  if (!(error instanceof ApiError)) return 'error.generic';
-  if (error.status === 0) return 'status.offline';
-  switch (error.code) {
-    case 'invalid_phone':
-      return 'auth.invalidPhone';
-    case 'otp_invalid':
-    case 'otp_expired':
-    case 'otp_attempts_exceeded':
-      return 'auth.wrongCode';
-    case 'outside_zone':
-      return 'zone.outside';
-    case 'idempotency_key_reused':
-      return 'checkout.mayBePlaced';
-    case 'restaurant_closed':
-      return 'error.restaurantClosed';
-    case 'item_not_in_restaurant':
-      return 'error.itemNotInRestaurant';
-    case 'validation_failed':
-      return 'error.validationFailed';
-    case 'item_unavailable':
-      return 'item.soldOut';
-    default:
-      return 'error.generic';
-  }
-}
+export { errorKey };
 
 /** "2 × Cold Coffee". */
 export function quantityLine(quantity: number, name: string): string {

@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildApp as build } from './app';
+import { buildApp as build, safeError } from './app';
 import { loadConfig } from './config';
 import { AppError } from './errors';
+import { TEST_DATA_KEYS } from './testing/keys';
 
 const config = loadConfig({
   NODE_ENV: 'test',
   DATABASE_URL: 'postgres://u:p@localhost/x',
   REDIS_URL: 'redis://localhost',
   OTP_SECRET: 'x'.repeat(40),
+  DATA_KEYS: TEST_DATA_KEYS,
 });
 const apps: Awaited<ReturnType<typeof build>>[] = [];
 async function buildApp(deps: Parameters<typeof build>[0]) {
@@ -128,6 +130,58 @@ describe('api skeleton', () => {
     const app = await buildApp({ config: { ...config, corsOrigins: ['http://localhost:8081'] }, checks: [pass] });
     const res = await app.inject({ method: 'GET', url: '/healthz', headers: { origin: 'http://localhost:8081' } });
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:8081');
-    expect(res.headers['access-control-expose-headers']).toBe('x-request-id');
+    expect(res.headers['access-control-expose-headers']).toBe('x-request-id, retry-after');
+  });
+});
+
+describe('security headers and log redaction', () => {
+  it('sends nosniff and HSTS on every response', async () => {
+    const app = await buildApp({ config, checks: [pass] });
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['strict-transport-security']).toBeDefined();
+  });
+
+  it('redacts credentials from anything logged with request headers', async () => {
+    const lines: string[] = [];
+    const logStream = { write: (line: string) => void lines.push(line) };
+    const app = await buildApp({ config, checks: [pass], logStream });
+    app.get('/probe-log', async (request) => {
+      request.log.info({ context: { headers: request.headers } }, 'probe');
+      return {};
+    });
+    await app.inject({
+      method: 'GET',
+      url: '/probe-log',
+      headers: {
+        authorization: 'Bearer sekret-token',
+        cookie: 'oregano_rt=sekret-cookie',
+        'x-document-ticket': 'sekret-ticket',
+      },
+    });
+    const text = lines.join('');
+    expect(text).toContain('[Redacted]');
+    for (const secret of ['sekret-token', 'sekret-cookie', 'sekret-ticket']) expect(text).not.toContain(secret);
+  });
+
+  it('logs a failed query without the values it carried', () => {
+    const database = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      table_name: 'users',
+      constraint_name: 'users_phone_unique',
+      detail: 'Key (phone)=(+8801711000001) already exists.',
+    });
+    const wrapped = Object.assign(
+      new Error('Failed query: INSERT INTO users (phone) VALUES ($1)\nparams: +8801711000001'),
+      {
+        name: 'DrizzleQueryError',
+        cause: database,
+      },
+    );
+    const logged = JSON.stringify(safeError(wrapped));
+    expect(logged).toContain('23505');
+    expect(logged).toContain('users_phone_unique');
+    expect(logged).not.toContain('+8801711000001');
+    expect(logged).not.toContain('Failed query');
   });
 });

@@ -22,6 +22,69 @@
       "when": 1794977638630,
       "tag": "0002_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794995136022,
+      "tag": "0003_fuzzy_jane_foster",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794995144003,
+      "tag": "0004_audit_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794995652613,
+      "tag": "0005_exotic_centennial",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794996150751,
+      "tag": "0006_crazy_bloodaxe",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794996575816,
+      "tag": "0007_tranquil_moondragon",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794996578038,
+      "tag": "0008_chubby_carlie_cooper",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795001330087,
+      "tag": "0009_colossal_white_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795002994983,
+      "tag": "0010_long_firebird",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795003731350,
+      "tag": "0011_lyrical_thanos",
+      "breakpoints": true
     }
   ]
 }

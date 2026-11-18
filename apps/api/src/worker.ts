@@ -1,8 +1,22 @@
 import { type Config, ConfigError, loadConfig } from './config';
-import { createDb } from './db/client';
+import { createDb, type Db } from './db/client';
 import { startRelay } from './events/relay';
+import { openStore } from './media/store';
+import { type DocumentSubject, pruneDocuments } from './media/vault';
+import { createProviders } from './notifications/sms/providers';
+import { startSmsDispatcher } from './notifications/sms/queue';
+import { restaurantApplicationAbandoned } from './onboarding/restaurant-applications';
+import { riderApplicationAbandoned } from './onboarding/rider-applications';
+import { defaultSweepJobs, startSweeper } from './worker/sweeper';
 
-function main(): void {
+/** Each kind of subject says for itself when its files are no longer wanted. */
+async function isAbandoned(db: Db, subject: DocumentSubject): Promise<boolean> {
+  return subject.type === 'restaurant_application'
+    ? restaurantApplicationAbandoned(db, subject.id)
+    : riderApplicationAbandoned(db, subject.id);
+}
+
+async function main(): Promise<void> {
   let config: Config;
   try {
     config = loadConfig(process.env);
@@ -16,7 +30,20 @@ function main(): void {
 
   const { db, close } = createDb(config.databaseUrl);
   const relay = startRelay(db, config.redisUrl);
-  console.log('worker started: relaying outbox to redis');
+  const providers = createProviders(config.smsProviders, { info: (message) => console.log(message) });
+  const sms = startSmsDispatcher(db, {
+    keys: config.dataKeys,
+    providers,
+    log: { warn: (message) => console.warn(message) },
+  });
+  const store = await openStore(config);
+  const documents = {
+    name: 'documents',
+    run: (_db: typeof db, now: Date) =>
+      pruneDocuments({ db, store, keys: config.dataKeys }, now, (subject) => isAbandoned(db, subject)),
+  };
+  const sweeper = startSweeper(db, [...defaultSweepJobs(), documents]);
+  console.log('worker started: relaying outbox to redis, sending SMS, sweeping old data');
 
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
@@ -24,6 +51,8 @@ function main(): void {
     shuttingDown = true;
     try {
       await relay.stop();
+      await sms.stop();
+      await sweeper.stop();
       await close();
       process.exit(0);
     } catch (error) {
@@ -35,4 +64,4 @@ function main(): void {
   process.on('SIGINT', shutdown);
 }
 
-main();
+void main();

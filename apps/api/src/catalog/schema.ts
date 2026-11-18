@@ -19,11 +19,16 @@ export const restaurants = pgTable(
     addressLine: text('address_line').notNull(),
     phone: text('phone'),
     location: geographyPoint('location').notNull(),
+    /** approved or suspended; no default, so every insert says which. Only approved restaurants are listed or orderable. */
+    status: text('status').notNull(),
     isOpen: boolean('is_open').notNull().default(true),
     prepMinutes: integer('prep_minutes').notNull().default(20),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [check('restaurants_prep_minutes_range', sql`${table.prepMinutes} BETWEEN 5 AND 120`)],
+  (table) => [
+    check('restaurants_prep_minutes_range', sql`${table.prepMinutes} BETWEEN 5 AND 120`),
+    check('restaurants_status_valid', sql`${table.status} IN ('approved', 'suspended')`),
+  ],
 );
 
 export const restaurantStaff = pgTable(

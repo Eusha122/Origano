@@ -12,7 +12,7 @@ import { poisha, READY_MINUTES, REJECT_REASONS, type ReadyMinutes, type RejectRe
 import { formatMoney, t } from '@oregano/i18n';
 import { colors, layout } from '@oregano/ui';
 import { Body, Button, Heading, LanguageButton, Screen, useLocale } from '@oregano/ui-native';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ErrorState } from './components';
 
@@ -29,7 +29,7 @@ function quantityLine(quantity: number, name: string): string {
 }
 
 /** The three lists of open orders, refreshed by realtime hints and every 15 seconds. */
-export function OrdersScreen() {
+export function OrdersScreen(props: { header?: ReactNode }) {
   const { locale } = useLocale();
   const api = useApi();
   const session = useSession();
@@ -47,6 +47,7 @@ export function OrdersScreen() {
     <Screen scroll>
       <Heading>{t(locale, 'restaurant.title')}</Heading>
       <LanguageButton />
+      {props.header}
       <View style={styles.tabs}>
         {TABS.map((entry) => (
           <View key={entry.status} style={styles.tab}>

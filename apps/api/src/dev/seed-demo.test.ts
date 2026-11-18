@@ -17,15 +17,23 @@ describe('demo seed', () => {
       ['Cold Coffee', 18000],
       ['Crispy Chicken Burger', 22000],
     ]);
-    const roles = await db.execute<{ phone: string; is_admin: boolean }>(
-      sql`SELECT phone, is_admin FROM users ORDER BY phone`,
-    );
+    const roles = await db.execute<{ phone: string }>(sql`SELECT phone FROM users ORDER BY phone`);
     expect(roles.map((r) => r.phone)).toEqual([
       '+8801711000001',
       '+8801711000002',
       '+8801711000003',
       '+8801711000004',
       '+8801711000005',
+      '+8801711000006',
+      '+8801711000007',
+    ]);
+    const team = await db.execute<{ phone: string; role: string }>(
+      sql`SELECT u.phone, tm.role FROM team_members tm JOIN users u ON u.id = tm.user_id ORDER BY u.phone`,
+    );
+    expect(team).toEqual([
+      { phone: '+8801711000004', role: 'superadmin' },
+      { phone: '+8801711000006', role: 'onboarding' },
+      { phone: '+8801711000007', role: 'support' },
     ]);
   });
 

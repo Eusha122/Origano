@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { type APIRequestContext, type Browser, type BrowserContext, expect, type Page } from '@playwright/test';
 
 /** The journey's own ports, never the dev ones, so a dev server left running can never be tested by mistake. */
@@ -15,6 +16,9 @@ export const E2E_DATABASE_URL =
 
 /** Redis for the e2e servers; override with E2E_REDIS_URL when the services are not on localhost. */
 export const E2E_REDIS_URL = process.env.E2E_REDIS_URL ?? 'redis://localhost:6379';
+
+/** Document storage for the e2e servers; override with E2E_S3_ENDPOINT when the services are not on localhost. */
+export const E2E_S3_ENDPOINT = process.env.E2E_S3_ENDPOINT ?? 'http://localhost:9000';
 
 /** The demo users from `seedDemo`. */
 export const PHONES = {
@@ -43,7 +47,7 @@ export async function signInWithForm(page: Page, request: APIRequestContext, pho
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
-/** Signs in through the API and returns the session token. */
+/** Signs in through the API and returns the access token. */
 export async function signInWithApi(request: APIRequestContext, phone: string): Promise<string> {
   const requested = await request.post(`${API_URL}/v1/auth/otp/request`, { data: { phone } });
   expect(requested.ok()).toBe(true);
@@ -51,7 +55,7 @@ export async function signInWithApi(request: APIRequestContext, phone: string): 
     data: { phone, code: await otpCode(request, phone) },
   });
   expect(verified.ok()).toBe(true);
-  return ((await verified.json()) as { token: string }).token;
+  return ((await verified.json()) as { accessToken: string }).accessToken;
 }
 
 export function bearer(token: string): { authorization: string } {
@@ -95,15 +99,53 @@ export async function orderNumber(page: Page): Promise<number> {
 
 const contexts: BrowserContext[] = [];
 
-/** One browser context per person, so each keeps its own session, as on separate phones. */
+/**
+ * One browser context per person, so each keeps its own session, as on separate phones. With a phone, the
+ * context is signed in first, the way a real browser is: the sign-in comes from the app's own origin, so the
+ * httpOnly refresh cookie lands in the context, and the app finds a remembered session when it loads.
+ */
 export async function openApp(browser: Browser, url: string, signedInAs?: string): Promise<Page> {
   const context = await browser.newContext();
   contexts.push(context);
-  // A session token from signInWithApi, placed where the apps keep it, before any page script runs.
-  if (signedInAs) await context.addInitScript((token) => localStorage.setItem('oregano.session', token), signedInAs);
+  if (signedInAs) {
+    const origin = new URL(url).origin;
+    const headers = { origin };
+    const requested = await context.request.post(`${API_URL}/v1/auth/otp/request`, {
+      data: { phone: signedInAs },
+      headers,
+    });
+    expect(requested.ok()).toBe(true);
+    const verified = await context.request.post(`${API_URL}/v1/auth/otp/verify`, {
+      data: { phone: signedInAs, code: await otpCode(context.request, signedInAs) },
+      headers,
+    });
+    expect(verified.ok()).toBe(true);
+    await context.addInitScript(() => localStorage.setItem('oregano.hasSession', '1'));
+  }
   const page = await context.newPage();
   await page.goto(url);
   return page;
+}
+
+/** The e2e document fixture: a small valid PNG. */
+export const DOCUMENT_FIXTURE = fileURLToPath(new URL('./fixtures/document.png', import.meta.url));
+
+/**
+ * Chooses a photo for the document picker with this label: the picker's button opens the browser's file chooser,
+ * and the file goes in it. Resolves when the picker says the photo was added.
+ */
+export async function uploadDocument(page: Page, label: string, file: string = DOCUMENT_FIXTURE): Promise<void> {
+  const picker = page.getByText(label, { exact: true }).locator('xpath=ancestor::div[.//button][1]');
+  const uploaded = page.waitForResponse(
+    (response) => response.url().includes('/documents/') && response.request().method() === 'POST',
+  );
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    picker.getByRole('button', { name: /^(Choose|Change) photo$/ }).click(),
+  ]);
+  await chooser.setFiles(file);
+  expect((await uploaded).status()).toBe(201);
+  await expect(picker.getByText('Photo added', { exact: true })).toBeVisible();
 }
 
 /** Closes every context openApp made; call after each test. */

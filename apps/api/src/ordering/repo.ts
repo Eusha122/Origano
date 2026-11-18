@@ -1,3 +1,4 @@
+import { teamCan } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { Executor } from '../db/client';
 import type { AuthUser } from '../identity/auth';
@@ -16,7 +17,7 @@ export async function resolveViewer(db: Executor, user: AuthUser, orderId: strin
     SELECT customer_id, restaurant_id, rider_id FROM orders WHERE id = ${orderId}`);
   const order = rows[0];
   if (!order) return null;
-  if (user.isAdmin) return { kind: 'admin', userId: user.id };
+  if (teamCan(user.teamRoles, 'orders.read')) return { kind: 'admin', userId: user.id };
   if (order.customer_id === user.id) return { kind: 'customer', userId: user.id };
   if (user.restaurantIds.includes(order.restaurant_id)) return { kind: 'restaurant', userId: user.id };
   if (order.rider_id === user.id) return { kind: 'rider', userId: user.id };

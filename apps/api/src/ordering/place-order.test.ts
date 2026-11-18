@@ -129,9 +129,9 @@ describe('placing an order', () => {
     await t.db.execute(sql`UPDATE menu_items SET is_available = true WHERE id = ${menuItemIds.coldCoffee}`);
 
     const other = await t.db.execute<{ id: string }>(sql`
-      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location)
+      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, status)
       VALUES (${zoneId}, 'other-place', 'Other', 'অন্য', 'Cafe', 'ক্যাফে', 'Main Road',
-        ST_SetSRID(ST_MakePoint(88.28, 24.6), 4326)::geography)
+        ST_SetSRID(ST_MakePoint(88.28, 24.6), 4326)::geography, 'approved')
       RETURNING id`);
     const category = await t.db.execute<{ id: string }>(sql`
       INSERT INTO menu_categories (restaurant_id, name_en, name_bn, position)
@@ -243,3 +243,43 @@ describe('placing an order', () => {
     expect([res.statusCode, res.json().error.code]).toEqual([403, 'actor_not_allowed']);
   });
 });
+
+describe('the open-order cap', () => {
+  const t = withTestApp({ limits: { openOrdersPerCustomer: 3 } });
+
+  const place = (token: string, key: string) =>
+    t.app().inject({
+      method: 'POST',
+      url: '/v1/orders',
+      headers: { ...t.as(token), 'idempotency-key': key },
+      payload: {
+        restaurantId: t.demo().restaurantId,
+        items: [{ menuItemId: t.demo().menuItemIds.coldCoffee, quantity: 1 }],
+        delivery: { lat: 24.5965, lng: 88.2775, addressLine: 'Court Road', landmark: 'Gate', phone: '01711000001' },
+      },
+    });
+
+  it('refuses a fourth open order, still answers a replay, and allows another once one is finished', async () => {
+    const token = await t.signIn('01711000001');
+    for (let i = 1; i <= 3; i++) expect((await place(token, `cap-key-000${i}`)).statusCode).toBe(201);
+    const fourth = await place(token, 'cap-key-0004');
+    expect(fourth.statusCode).toBe(409);
+    expect(fourth.json().error.code).toBe('too_many_open_orders');
+    // A retry of an order that already exists is not a new order.
+    expect((await place(token, 'cap-key-0001')).statusCode).toBe(201);
+    await t.db.execute(sql`UPDATE orders SET status = 'cancelled' WHERE id = (SELECT id FROM orders LIMIT 1)`);
+    expect((await place(token, 'cap-key-0005')).statusCode).toBe(201);
+  });
+
+  it('gives exactly three orders when four are placed at the same moment with different keys', async () => {
+    const token = await t.signIn('01711000099');
+    const results = await Promise.all([1, 2, 3, 4].map((i) => place(token, `race-key-000${i}`)));
+    expect(results.map((r) => r.statusCode).sort()).toEqual([201, 201, 201, 409]);
+    expect(await count('orders', t)).toBe(3);
+  });
+});
+
+async function count(table: string, t: ReturnType<typeof withTestApp>): Promise<number> {
+  const rows = await t.db.execute<{ n: number }>(sql.raw(`SELECT count(*)::int AS n FROM ${table}`));
+  return rows[0]?.n ?? -1;
+}

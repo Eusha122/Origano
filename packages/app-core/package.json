@@ -15,6 +15,7 @@
   "dependencies": {
     "@oregano/api-client": "workspace:*",
     "@oregano/contracts": "workspace:*",
+    "@oregano/i18n": "workspace:*",
     "@tanstack/react-query": "^5.107.1"
   },
   "peerDependencies": {

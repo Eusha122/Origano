@@ -1,6 +1,7 @@
 import { type Order, PlaceOrderBody } from '@oregano/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { Services } from '../app';
+import type { Config } from '../config';
 import { AppError } from '../errors';
 import { requireUser } from '../identity/auth';
 import { assertIdempotencyKey, withIdempotency } from './idempotency';
@@ -10,7 +11,7 @@ import { applyTransition, placeOrderIn } from './service';
 
 const notFound = () => new AppError('not_found', 404, 'Not found.');
 
-export function orderRoutes(app: FastifyInstance, { db }: Services): void {
+export function orderRoutes(app: FastifyInstance, config: Config, { db }: Services): void {
   app.post('/orders', async (request, reply): Promise<Order> => {
     const user = requireUser(request);
     const header = request.headers['idempotency-key'];
@@ -19,7 +20,7 @@ export function orderRoutes(app: FastifyInstance, { db }: Services): void {
     if (!parsed.success) throw new AppError('validation_failed', 400, 'Some details are missing or wrong.');
 
     const result = await withIdempotency(db, { userId: user.id, key, requestBody: request.body }, async (tx) => {
-      const { orderId } = await placeOrderIn(tx, user, parsed.data);
+      const { orderId } = await placeOrderIn(tx, user, parsed.data, config.limits.openOrdersPerCustomer);
       return { status: 201, body: await loadOrder(tx, orderId, { kind: 'customer', userId: user.id }) };
     });
     reply.code(result.status);

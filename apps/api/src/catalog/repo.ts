@@ -62,7 +62,7 @@ export async function listRestaurants(db: Db, opts: { zoneId?: string; point?: P
     SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
       r.is_open, r.prep_minutes, r.zone_id, ${distanceColumn(opts.point)} AS distance_m
     FROM restaurants r JOIN zones z ON z.id = r.zone_id
-    WHERE ${zoneFilter}
+    WHERE ${zoneFilter} AND r.status = 'approved'
     ORDER BY r.is_open DESC, r.name_en ASC`);
   return rows.map(toRestaurantRow);
 }
@@ -71,7 +71,7 @@ export async function findRestaurantBySlug(db: Db, slug: string, point?: Point):
   const rows = await db.execute<RestaurantDbRow>(sql`
     SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
       r.is_open, r.prep_minutes, r.zone_id, ${distanceColumn(point)} AS distance_m
-    FROM restaurants r WHERE r.slug = ${slug}`);
+    FROM restaurants r WHERE r.slug = ${slug} AND r.status = 'approved'`);
   const row = rows[0];
   return row ? toRestaurantRow(row) : null;
 }
@@ -129,6 +129,8 @@ export type RestaurantForOrder = {
   id: string;
   zoneId: string;
   isOpen: boolean;
+  /** Only an approved restaurant can take orders. */
+  approved: boolean;
   nameEn: string;
   nameBn: string;
   location: { lat: number; lng: number };
@@ -139,12 +141,13 @@ export async function getRestaurantForOrder(db: Executor, id: string): Promise<R
     id: string;
     zone_id: string;
     is_open: boolean;
+    status: string;
     name_en: string;
     name_bn: string;
     lat: number;
     lng: number;
   }>(sql`
-    SELECT id, zone_id, is_open, name_en, name_bn,
+    SELECT id, zone_id, is_open, status, name_en, name_bn,
       ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
     FROM restaurants WHERE id = ${id}`);
   const r = rows[0];
@@ -153,6 +156,7 @@ export async function getRestaurantForOrder(db: Executor, id: string): Promise<R
     id: r.id,
     zoneId: r.zone_id,
     isOpen: r.is_open,
+    approved: r.status === 'approved',
     nameEn: r.name_en,
     nameBn: r.name_bn,
     location: { lat: Number(r.lat), lng: Number(r.lng) },
@@ -199,4 +203,36 @@ export async function distanceMeters(db: Executor, from: Point, to: Point): Prom
   const row = rows[0];
   if (!row) throw new Error('Distance query returned no row');
   return Number(row.d);
+}
+
+const slugBase = (name: string): string =>
+  name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 50)
+    .replace(/^-+|-+$/g, '') || 'restaurant';
+
+/**
+ * Creates a restaurant that is approved but closed: its owner opens it when ready. The slug comes from the name
+ * (`spice-garden`, then `spice-garden-2`, `-3` and so on). Bangla text is copied from English until the owner edits it.
+ */
+export async function createApprovedRestaurant(
+  tx: Executor,
+  r: { zoneId: string; name: string; cuisine: string; addressLine: string; phone: string | null; location: Point },
+): Promise<{ id: string; slug: string }> {
+  const base = slugBase(r.name);
+  for (let n = 1; n < 1000; n++) {
+    const slug = n === 1 ? base : `${base}-${n}`;
+    const rows = await tx.execute<{ id: string }>(sql`
+      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, phone, location,
+        is_open, status)
+      VALUES (${r.zoneId}, ${slug}, ${r.name}, ${r.name}, ${r.cuisine}, ${r.cuisine}, ${r.addressLine}, ${r.phone},
+        ST_SetSRID(ST_MakePoint(${r.location.lng}, ${r.location.lat}), 4326)::geography, false, 'approved')
+      ON CONFLICT (slug) DO NOTHING RETURNING id`);
+    const id = rows[0]?.id;
+    if (id) return { id, slug };
+  }
+  throw new Error('No free restaurant slug');
 }

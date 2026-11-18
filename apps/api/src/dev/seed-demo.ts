@@ -1,4 +1,4 @@
-import { type Money, normalizeBdPhone, taka } from '@oregano/domain';
+import { type Money, normalizeBdPhone, type TeamRole, taka } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { seedZones } from '../zones/seed';
@@ -30,22 +30,29 @@ async function one<T extends Record<string, unknown>>(rows: Promise<T[]>): Promi
   return row;
 }
 
-async function upsertUser(db: Db, local: string, name: string | null, isAdmin: boolean): Promise<string> {
+async function upsertUser(db: Db, local: string, name: string | null, team?: TeamRole): Promise<string> {
   const row = await one(
     db.execute<{ id: string }>(sql`
-      INSERT INTO users (phone, name, is_admin) VALUES (${phone(local)}, ${name}, ${isAdmin})
-      ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, is_admin = EXCLUDED.is_admin
+      INSERT INTO users (phone, name) VALUES (${phone(local)}, ${name})
+      ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
       RETURNING id`),
   );
+  await db.execute(sql`DELETE FROM team_members WHERE user_id = ${row.id}`);
+  if (team) {
+    await db.execute(
+      sql`INSERT INTO team_members (user_id, role, granted_by_label) VALUES (${row.id}, ${team}, 'demo seed')`,
+    );
+  }
   return row.id;
 }
 
 async function upsertRider(db: Db, userId: string, zoneId: string): Promise<void> {
   await db.execute(sql`
-    INSERT INTO riders (user_id, zone_id, type, status, is_online)
-    VALUES (${userId}, ${zoneId}, 'independent', 'approved', false)
+    INSERT INTO riders (user_id, zone_id, type, status, is_online, vehicle_type)
+    VALUES (${userId}, ${zoneId}, 'independent', 'approved', false, 'motorcycle')
     ON CONFLICT (user_id) DO UPDATE SET zone_id = EXCLUDED.zone_id, type = EXCLUDED.type,
-      status = EXCLUDED.status, is_online = EXCLUDED.is_online`);
+      status = EXCLUDED.status, is_online = EXCLUDED.is_online, vehicle_type = EXCLUDED.vehicle_type,
+      last_activity_at = now()`);
 }
 
 async function upsertCategory(
@@ -91,23 +98,25 @@ export async function seedDemo(db: Db): Promise<DemoIds> {
   const zone = await one(db.execute<{ id: string }>(sql`SELECT id FROM zones WHERE slug = ${DEMO_ZONE_SLUG}`));
   const zoneId = zone.id;
 
-  const customerId = await upsertUser(db, '01711000001', null, false);
-  const ownerId = await upsertUser(db, '01711000002', 'Burger Lane owner', false);
-  const riderId = await upsertUser(db, '01711000003', 'Rahim', false);
-  const adminId = await upsertUser(db, '01711000004', 'Oregano admin', true);
-  const secondRiderId = await upsertUser(db, '01711000005', 'Karim', false);
+  const customerId = await upsertUser(db, '01711000001', null);
+  const ownerId = await upsertUser(db, '01711000002', 'Burger Lane owner');
+  const riderId = await upsertUser(db, '01711000003', 'Rahim');
+  const adminId = await upsertUser(db, '01711000004', 'Oregano admin', 'superadmin');
+  const secondRiderId = await upsertUser(db, '01711000005', 'Karim');
+  await upsertUser(db, '01711000006', 'Oregano onboarding', 'onboarding');
+  await upsertUser(db, '01711000007', 'Oregano support', 'support');
   await upsertRider(db, riderId, zoneId);
   await upsertRider(db, secondRiderId, zoneId);
 
   const restaurant = await one(
     db.execute<{ id: string }>(sql`
-      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, is_open, prep_minutes)
+      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, is_open, prep_minutes, status)
       VALUES (${zoneId}, 'burger-lane', 'Burger Lane', 'বার্গার লেন', 'Burgers, pizza', 'বার্গার, পিৎজা',
-        'Court Road, Chapainawabganj', ST_GeogFromText('SRID=4326;POINT(88.2710 24.5960)'), true, 20)
+        'Court Road, Chapainawabganj', ST_GeogFromText('SRID=4326;POINT(88.2710 24.5960)'), true, 20, 'approved')
       ON CONFLICT (slug) DO UPDATE SET zone_id = EXCLUDED.zone_id, name_en = EXCLUDED.name_en,
         name_bn = EXCLUDED.name_bn, cuisine_en = EXCLUDED.cuisine_en, cuisine_bn = EXCLUDED.cuisine_bn,
         address_line = EXCLUDED.address_line, location = EXCLUDED.location, is_open = EXCLUDED.is_open,
-        prep_minutes = EXCLUDED.prep_minutes
+        prep_minutes = EXCLUDED.prep_minutes, status = EXCLUDED.status
       RETURNING id`),
   );
   const restaurantId = restaurant.id;

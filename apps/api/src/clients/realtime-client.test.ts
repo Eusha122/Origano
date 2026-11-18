@@ -22,12 +22,15 @@ describe('realtime client against the real hub', () => {
     publisher.publish(
       EVENTS_CHANNEL,
       JSON.stringify({
-        orderId,
-        customerId: t.demo().customerId,
-        restaurantId: 'r-x',
-        riderId: null,
-        zoneId: 'z-x',
-        status: 'placed',
+        topic: 'order.changed',
+        payload: {
+          orderId,
+          customerId: t.demo().customerId,
+          restaurantId: 'r-x',
+          riderId: null,
+          zoneId: 'z-x',
+          status: 'placed',
+        },
       }),
     );
 

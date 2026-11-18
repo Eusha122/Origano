@@ -1,9 +1,10 @@
 import { createDb } from '@oregano/api/db/client';
 import { runMigrations } from '@oregano/api/db/migrate';
 import { seedDemo } from '@oregano/api/dev/seed-demo';
+import { emptyE2eBucket } from '@oregano/api/media/store';
 import { assertTestDatabaseUrl } from '@oregano/api/testing/guard';
 import { emptyAllTables } from '@oregano/api/testing/reset';
-import { APP_URLS, E2E_DATABASE_URL } from './journey';
+import { APP_URLS, E2E_DATABASE_URL, E2E_S3_ENDPOINT } from './journey';
 
 /** Migrates the e2e database, empties it and seeds the demo data, so every run starts from the same state. */
 async function resetDatabase(): Promise<void> {
@@ -38,7 +39,20 @@ async function warmBundles(): Promise<void> {
   );
 }
 
+/** Empties the e2e document bucket (it refuses any bucket not named *-e2e), so uploads never pile up between runs. */
+async function resetStorage(): Promise<void> {
+  await emptyE2eBucket({
+    endpoint: E2E_S3_ENDPOINT,
+    region: 'us-east-1',
+    bucket: 'oregano-e2e',
+    accessKeyId: 'oregano',
+    secretAccessKey: 'oregano-dev-secret',
+    forcePathStyle: true,
+  });
+}
+
 export default async function globalSetup(): Promise<void> {
   await resetDatabase();
+  await resetStorage();
   await warmBundles();
 }

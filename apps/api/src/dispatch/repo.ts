@@ -1,6 +1,6 @@
 import type { RiderOffer } from '@oregano/contracts';
 import { sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import type { Db, Tx } from '../db/client';
 import { writeOrderChanged } from '../events/outbox';
 
 export type ClaimResult = 'claimed' | 'already_mine' | 'taken' | 'not_claimable';
@@ -11,6 +11,13 @@ export type ClaimResult = 'claimed' | 'already_mine' | 'taken' | 'not_claimable'
  */
 export function claimOrder(db: Db, riderId: string, orderId: string): Promise<ClaimResult> {
   return db.transaction(async (tx) => {
+    // Share-lock the rider so a suspension (which locks the same row) either finishes first, and this claim sees it,
+    // or waits for this claim and then releases the order. Neither can slip past the other.
+    const allowed = await tx.execute(sql`
+      SELECT r.user_id FROM riders r LEFT JOIN agencies a ON a.id = r.agency_id
+      WHERE r.user_id = ${riderId} AND r.status = 'approved' AND r.is_online AND (a.id IS NULL OR a.status = 'approved')
+      FOR SHARE OF r`);
+    if (allowed.length === 0) return 'not_claimable';
     const won = await tx.execute<{
       id: string;
       customer_id: string;
@@ -21,6 +28,7 @@ export function claimOrder(db: Db, riderId: string, orderId: string): Promise<Cl
       UPDATE orders SET rider_id = ${riderId}, updated_at = now()
       WHERE id = ${orderId} AND rider_id IS NULL AND status IN ('preparing', 'ready')
         AND zone_id = (SELECT zone_id FROM riders WHERE user_id = ${riderId})
+        AND COALESCE((SELECT restaurant_id = orders.restaurant_id FROM riders WHERE user_id = ${riderId}), TRUE)
       RETURNING id, customer_id, restaurant_id, zone_id, status`);
     const row = won[0];
     if (row) {
@@ -48,7 +56,11 @@ export function claimOrder(db: Db, riderId: string, orderId: string): Promise<Cl
 }
 
 /** Unclaimed preparing/ready orders in the rider's zone, newest first. No customer phone or address line. */
-export async function listOffers(db: Db, zoneId: string): Promise<RiderOffer[]> {
+export async function listOffers(
+  db: Db,
+  zoneId: string,
+  onlyRestaurantId: string | null = null,
+): Promise<RiderOffer[]> {
   const rows = await db.execute<{
     id: string;
     number: number;
@@ -64,6 +76,7 @@ export async function listOffers(db: Db, zoneId: string): Promise<RiderOffer[]> 
       ST_Distance(r.location, o.delivery_location) AS distance_m, o.delivery_fee_poisha
     FROM orders o JOIN restaurants r ON r.id = o.restaurant_id
     WHERE o.zone_id = ${zoneId} AND o.rider_id IS NULL AND o.status IN ('preparing', 'ready')
+      ${onlyRestaurantId ? sql`AND o.restaurant_id = ${onlyRestaurantId}` : sql``}
     ORDER BY o.created_at DESC, o.number DESC`);
   return rows.map((r) => ({
     orderId: r.id,
@@ -74,4 +87,35 @@ export async function listOffers(db: Db, zoneId: string): Promise<RiderOffer[]> 
     distanceKm: Math.round(Number(r.distance_m) / 100) / 10,
     deliveryFee: r.delivery_fee_poisha,
   }));
+}
+
+/**
+ * Puts every order this rider holds but has not picked up (preparing or ready) back in the offer pool.
+ * Orders already on the road stay with the rider, who can still deliver them. Returns the released order ids.
+ */
+export async function releaseRiderOrders(tx: Tx, riderId: string): Promise<string[]> {
+  const released = await tx.execute<{
+    id: string;
+    customer_id: string;
+    restaurant_id: string;
+    zone_id: string;
+    status: 'preparing' | 'ready';
+  }>(sql`
+    UPDATE orders SET rider_id = NULL, updated_at = now()
+    WHERE rider_id = ${riderId} AND status IN ('preparing', 'ready')
+    RETURNING id, customer_id, restaurant_id, zone_id, status`);
+  for (const row of released) {
+    await tx.execute(sql`
+      INSERT INTO order_events (order_id, event, from_status, to_status, actor_type, actor_id)
+      VALUES (${row.id}, 'rider_released', ${row.status}, ${row.status}, 'system', ${riderId})`);
+    await writeOrderChanged(tx, {
+      orderId: row.id,
+      customerId: row.customer_id,
+      restaurantId: row.restaurant_id,
+      riderId: null,
+      zoneId: row.zone_id,
+      status: row.status,
+    });
+  }
+  return released.map((r) => r.id);
 }

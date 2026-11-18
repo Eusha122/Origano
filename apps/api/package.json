@@ -7,6 +7,7 @@
     "./db/migrate": "./src/db/migrate.ts",
     "./db/client": "./src/db/client.ts",
     "./dev/seed-demo": "./src/dev/seed-demo.ts",
+    "./media/store": "./src/media/store.ts",
     "./testing/guard": "./src/testing/guard.ts",
     "./testing/reset": "./src/testing/reset.ts"
   },
@@ -19,18 +20,27 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
+    "otp": "tsx --env-file-if-exists=.env src/identity/otp-cli.ts",
+    "team": "tsx --env-file-if-exists=.env src/identity/team-cli.ts",
     "db:seed": "tsx --env-file-if-exists=.env src/dev/seed-cli.ts",
     "db:seed:demo": "tsx --env-file-if-exists=.env src/dev/seed-demo-cli.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1170.0",
+    "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.4.3",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.9",
+    "@fastify/rate-limit": "^11.2.2",
     "@fastify/websocket": "^11.3.7",
     "@oregano/contracts": "workspace:*",
     "@oregano/domain": "workspace:*",
+    "@oregano/i18n": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.12.8",
     "ioredis": "^6.0.0",
     "postgres": "^4.1.1",
+    "sharp": "^0.35.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {
