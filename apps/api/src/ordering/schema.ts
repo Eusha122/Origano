@@ -40,6 +40,7 @@ export const orders = pgTable(
     index('orders_restaurant_status_idx').on(table.restaurantId, table.status),
     index('orders_customer_created_idx').on(table.customerId, table.createdAt.desc()),
     index('orders_zone_unassigned_idx').on(table.zoneId, table.status).where(sql`${table.riderId} IS NULL`),
+    index('orders_rider_idx').on(table.riderId),
     check('orders_type_valid', sql`${table.type} IN ('delivery')`),
     check(
       'orders_status_valid',
@@ -72,6 +73,7 @@ export const orderItems = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    index('order_items_order_idx').on(table.orderId),
     check('order_items_unit_price_positive', sql`${table.unitPricePoisha} > 0`),
     check('order_items_quantity_range', sql`${table.quantity} BETWEEN 1 AND 20`),
     check('order_items_line_total', sql`${table.lineTotalPoisha} = ${table.unitPricePoisha} * ${table.quantity}`),
