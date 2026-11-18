@@ -10,19 +10,56 @@ Prerequisites: Node 24, pnpm (via corepack), Docker.
 pnpm install          # install everything
 pnpm db:up            # start local PostgreSQL (PostGIS) and Redis in Docker
 pnpm db:migrate       # apply migrations to the local database
-pnpm db:seed          # seed the Chapainawabganj zone
+pnpm db:seed          # seed the Chapainawabganj zone (safe on any database)
+pnpm db:seed:demo     # add the demo restaurant and users (only on `oregano` or a `*_test` database, never in production)
 pnpm verify           # the completion gate: lint, typecheck, tests, web build, browser tests
 pnpm format           # apply Biome formatting
 pnpm --filter @oregano/domain test   # one package's tests
+pnpm test:e2e         # browser tests only, including the first-order journey (needs pnpm db:up)
 ```
 
 API tests use a real database (`oregano_test`), created automatically by `infra/postgres-init` the first time `pnpm db:up` runs.
 
+Browser tests live in `e2e/` (Playwright). They start their own six servers, never reusing a running one: the API, the outbox worker and the four apps, against their own database `oregano_e2e_test`, which global setup migrates, empties (it refuses any database not named `*_test`) and seeds with the demo data. Sign-in codes come from the development-only `GET /v1/dev/otp/:phone` (`DEV_OTP_PEEK=true`).
+
+|                    | API  | Customer | Restaurant | Rider | Admin |
+| ------------------ | ---- | -------- | ---------- | ----- | ----- |
+| Dev ports          | 4000 | 8081     | 8082       | 8083  | 8084  |
+| Journey test ports | 4100 | 8191     | 8192       | 8193  | 8194  |
+
+The e2e config reads `E2E_DATABASE_URL` and `E2E_REDIS_URL` (defaults: the local Docker services). `pnpm verify` also builds all three Expo web apps and the admin.
+
+### Running the gate in a clean container
+
+Proves the branch passes from a fresh checkout, not just on this machine. With `pnpm db:up` running:
+
+```bash
+docker run --rm --add-host=host.docker.internal:host-gateway   -v "$(pwd -W 2>/dev/null || pwd)/.git:/src.git:ro"   -e DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano   -e TEST_DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano_test   -e E2E_DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano_e2e_test   -e REDIS_URL=redis://host.docker.internal:6379   -e E2E_REDIS_URL=redis://host.docker.internal:6379   node:24 bash -c "corepack enable && git clone /src.git /work && cd /work && git checkout plan-02-first-order     && pnpm install && pnpm --filter @oregano/e2e exec playwright install --with-deps chromium     && pnpm db:migrate && pnpm verify"
+```
+
+The checkout is read-only (`/src.git` is mounted `:ro`). Every database and Redis URL points at `host.docker.internal`, never `localhost`, which inside the container is the container itself.
+
+On a Docker volume created before `oregano_e2e_test` existed, `infra/postgres-init` will not run again, so create it once by hand:
+
+```bash
+docker compose -f infra/docker-compose.yml exec postgres psql -U oregano -c "CREATE DATABASE oregano_e2e_test OWNER oregano;"
+```
+
+Demo phones (from `pnpm db:seed:demo`): customer 01711000001, Burger Lane owner 01711000002, rider 01711000003, admin 01711000004, second rider 01711000005.
+
 ## Layout
 
 ```
-apps/api/         Fastify backend: config, health checks, database, zones
+apps/api/         Fastify backend and the outbox worker (src/worker.ts)
 apps/customer/    Expo app (web, Android, iOS); screens in src/app/
+apps/restaurant/  Expo app for restaurant staff
+apps/rider/       Expo app for riders
+apps/admin/       Vite web dashboard for the Oregano team
+e2e/              Playwright browser tests across all four apps
+packages/contracts/ Request and response shapes shared by the API and the apps (zod)
+packages/api-client/ Typed API client and realtime socket, no React
+packages/app-core/ React glue shared by the apps: session, queries, realtime hints
+packages/ui-native/ Brand-styled React Native components shared by the apps
 packages/domain/  Pure business rules: money, order state machine
 packages/i18n/    English and Bangla messages, money formatting
 packages/ui/      Brand tokens and contrast checks

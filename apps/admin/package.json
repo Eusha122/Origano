@@ -1,0 +1,28 @@
+{
+  "name": "@oregano/admin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 8084 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@oregano/app-core": "workspace:*",
+    "@oregano/contracts": "workspace:*",
+    "@oregano/domain": "workspace:*",
+    "@oregano/i18n": "workspace:*",
+    "@oregano/ui": "workspace:*",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "@types/react-dom": "~19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.8"
+  }
+}

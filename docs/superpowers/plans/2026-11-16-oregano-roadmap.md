@@ -6,19 +6,19 @@ The platform is too large for one plan. It is split into eleven plans, each endi
 
 ## Order of work
 
-| Plan | Name                               | Depends on     | Status                                      |
-| ---- | ---------------------------------- | -------------- | ------------------------------------------- |
-| 01   | Foundation                         | none           | Written: `2026-11-16-plan-01-foundation.md` |
-| 02   | First order, end to end            | 01             | To write                                    |
-| 03   | Identity hardening and onboarding  | 02             | To write                                    |
-| 04   | Catalog and zones, complete        | 02             | To write                                    |
-| 05   | Customer experience, complete      | 03, 04         | To write                                    |
-| 06   | Order operations and failure paths | 02             | To write                                    |
-| 07   | Money                              | 06             | To write                                    |
-| 08   | Hangout cart                       | 05             | To write                                    |
-| 09   | Admin dashboard, complete          | 03, 04, 06, 07 | To write                                    |
-| 10   | Native apps                        | 05, 06         | To write                                    |
-| 11   | Production hardening and launch    | all            | To write                                    |
+| Plan | Name                               | Depends on     | Status                                       |
+| ---- | ---------------------------------- | -------------- | -------------------------------------------- |
+| 01   | Foundation                         | none           | Done, merged 16 Nov 2026                     |
+| 02   | First order, end to end            | 01             | Written: `2026-11-16-plan-02-first-order.md` |
+| 03   | Identity hardening and onboarding  | 02             | To write                                     |
+| 04   | Catalog and zones, complete        | 02             | To write                                     |
+| 05   | Customer experience, complete      | 03, 04         | To write                                     |
+| 06   | Order operations and failure paths | 02             | To write                                     |
+| 07   | Money                              | 06             | To write                                     |
+| 08   | Hangout cart                       | 05             | To write                                     |
+| 09   | Admin dashboard, complete          | 03, 04, 06, 07 | To write                                     |
+| 10   | Native apps                        | 05, 06         | To write                                     |
+| 11   | Production hardening and launch    | all            | To write                                     |
 
 Plans 03 and 04 can run in either order. So can 06 and 08.
 
@@ -31,6 +31,8 @@ Monorepo, tooling, money rules, order state machine, language and brand packages
 
 ### Plan 02: First order, end to end
 
+**Status: done (18 November 2026).** All 16 tasks and the final review fixes are merged; `pnpm verify` and CI pass.
+
 The thinnest complete order: sign in by OTP (code printed to the server log, no SMS yet), one seeded restaurant with a menu, place a cash-on-delivery order, restaurant accepts and marks ready, rider claims, picks up and delivers, admin sees it live. Creates the restaurant, rider and admin app shells, `packages/contracts`, `packages/api-client`, the outbox, the worker and WebSocket hints.
 **Done when:** a Playwright test drives one order through all four web apps from placed to delivered, and a retried "place order" request does not create a second order.
 
@@ -38,6 +40,7 @@ The thinnest complete order: sign in by OTP (code printed to the server log, no 
 
 Real SMS through two providers, all OTP limits from blueprint section 7, session rotation with reuse detection, roles and staff management, the restaurant application form and approval queue, rider verification with document upload, agency accounts, account states.
 **Done when:** a restaurant and a rider can each go from application to approved without database access, and the OTP limits are proven by tests.
+**Must include (from the Plan 02 security review):** OTP requests capped per phone and per IP address per hour and per day, not only a 60-second resend gap; wrong-attempt counts that survive a new code request (today a new request resets them, which allows unbounded guessing); a production refusal to start with the logging OTP sender; and a unique constraint so one phone has at most one live challenge. The API must not be exposed to the internet before these land. Also from the Plan 02 final review: per-user and per-IP rate limits on every write endpoint, especially order placement (a signed-in account can otherwise flood a restaurant with real cash orders), per-IP limits on OTP verification across many phones and on the public restaurant list, and a per-IP cap on WebSocket connections.
 
 ### Plan 04: Catalog and zones, complete
 
@@ -53,6 +56,7 @@ Map pin with landmark and saved addresses, home, search, restaurant page, item o
 
 Every row of the book's "when something goes wrong" table: rejection with reason and similar restaurants, auto-cancel, item sold out after ordering, offer waves and no-rider alerts, rider delay, customer unreachable, manual reassignment. The full notification table in book section 11, including the layered restaurant alert from blueprint section 8.
 **Done when:** each failure row has a test that triggers it and checks what each party sees.
+**Must include (from the Plan 02 review):** before adding manual reassignment, move the "is this rider holding the order" check for pick-up and deliver inside `applyTransition`'s row lock, so a rider who lost an order can never act on it. Decide with the founder what happens to an order held by a rider who is suspended mid-delivery.
 
 ### Plan 07: Money
 

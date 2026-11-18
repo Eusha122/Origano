@@ -13,6 +13,12 @@ export function createDb(databaseUrl: string) {
 
 export type Db = ReturnType<typeof createDb>['db'];
 
+/** The handle a service receives inside `db.transaction`. */
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** Anything that can run SQL: the database or an open transaction. */
+export type Executor = Pick<Db, 'execute'>;
+
 export function postgresCheck(db: Db): ReadinessCheck {
   return {
     name: 'postgres',

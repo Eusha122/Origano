@@ -1,10 +1,25 @@
 import { randomUUID } from 'node:crypto';
+import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { adminRoutes } from './admin/routes';
+import { catalogRoutes } from './catalog/routes';
 import type { Config } from './config';
+import type { Db } from './db/client';
+import { dispatchRoutes } from './dispatch/routes';
 import { AppError } from './errors';
+import type { RealtimeHub } from './events/realtime';
 import { healthRoutes, type ReadinessCheck } from './health/routes';
+import { registerAuth } from './identity/auth';
+import { devRoutes } from './identity/dev-routes';
+import type { OtpSender } from './identity/otp';
+import { identityRoutes } from './identity/routes';
+import { findUserByToken } from './identity/sessions';
+import { restaurantRoutes } from './ordering/restaurant-routes';
+import { orderRoutes } from './ordering/routes';
 
 export type { ReadinessCheck } from './health/routes';
+
+export type Services = { db: Db; otpSender: OtpSender; realtime?: RealtimeHub };
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -23,7 +38,11 @@ function clientErrorStatus(error: unknown): number | null {
   return statusCode;
 }
 
-export async function buildApp(deps: { config: Config; checks: ReadinessCheck[] }): Promise<FastifyInstance> {
+export async function buildApp(deps: {
+  config: Config;
+  checks: ReadinessCheck[];
+  services?: Services;
+}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: deps.config.nodeEnv === 'test' ? false : { level: deps.config.logLevel },
     genReqId: (request) => {
@@ -58,6 +77,32 @@ export async function buildApp(deps: { config: Config; checks: ReadinessCheck[] 
       .send({ error: { code: 'internal', message: 'Something went wrong.', requestId: request.id } });
   });
 
+  // Only the listed origins may call the API from a browser; an empty list allows none.
+  await app.register(cors, {
+    origin: deps.config.corsOrigins,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    // The apps quote the request id when something fails, so the browser must let them read it.
+    exposedHeaders: ['x-request-id'],
+  });
+
   healthRoutes(app, deps.checks);
+
+  const { services, config } = deps;
+  if (services) {
+    registerAuth(app, services.db);
+    await app.register(
+      async (v1) => {
+        identityRoutes(v1, config, services);
+        catalogRoutes(v1, services);
+        orderRoutes(v1, services);
+        restaurantRoutes(v1, services);
+        dispatchRoutes(v1, services);
+        adminRoutes(v1, services);
+        if (config.devOtpPeek) devRoutes(v1, services.otpSender);
+      },
+      { prefix: '/v1' },
+    );
+  }
+  if (services?.realtime) services.realtime.register(app, (token) => findUserByToken(services.db, token));
   return app;
 }

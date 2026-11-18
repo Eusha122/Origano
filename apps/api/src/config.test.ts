@@ -5,6 +5,7 @@ const valid = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgres://u:p@localhost:5432/oregano',
   REDIS_URL: 'redis://localhost:6379',
+  OTP_SECRET: 'x'.repeat(40),
 };
 
 describe('loadConfig', () => {
@@ -15,6 +16,10 @@ describe('loadConfig', () => {
       logLevel: 'info',
       databaseUrl: 'postgres://u:p@localhost:5432/oregano',
       redisUrl: 'redis://localhost:6379',
+      otpSecret: 'x'.repeat(40),
+      sessionTtlDays: 60,
+      corsOrigins: [],
+      devOtpPeek: false,
     });
   });
 
@@ -36,6 +41,7 @@ describe('loadConfig', () => {
       loadConfig({ ...valid, DATABASE_URL: 'mysql://user:hunter2@host/db' });
       expect.unreachable();
     } catch (error) {
+      expect(error).toBeInstanceOf(ConfigError);
       expect(String((error as Error).message)).not.toContain('hunter2');
     }
   });
@@ -51,6 +57,39 @@ describe('loadConfig', () => {
         expect((error as ConfigError).problems.join(' ')).toContain(key);
         expect((error as Error).message).not.toContain('w0rd');
       }
+    }
+  });
+
+  it('refuses DEV_OTP_PEEK in production', () => {
+    expect(loadConfig({ ...valid, DEV_OTP_PEEK: 'true' }).devOtpPeek).toBe(true);
+    try {
+      loadConfig({ ...valid, NODE_ENV: 'production', DEV_OTP_PEEK: 'true' });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigError);
+      expect((error as ConfigError).problems.join(' ')).toContain('DEV_OTP_PEEK');
+    }
+  });
+
+  it('requires OTP_SECRET of at least 32 characters and never echoes it', () => {
+    for (const bad of [undefined, 'short-secret-value']) {
+      try {
+        loadConfig({ ...valid, OTP_SECRET: bad });
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as ConfigError).problems.join(' ')).toContain('OTP_SECRET');
+        expect((error as Error).message).not.toContain('short-secret-value');
+      }
+    }
+  });
+
+  it('parses CORS_ORIGINS', () => {
+    expect(
+      loadConfig({ ...valid, CORS_ORIGINS: 'http://localhost:8081, https://order.example.com/' }).corsOrigins,
+    ).toEqual(['http://localhost:8081', 'https://order.example.com']);
+    for (const bad of ['*', 'not a url']) {
+      expect(() => loadConfig({ ...valid, CORS_ORIGINS: bad })).toThrow(ConfigError);
     }
   });
 });

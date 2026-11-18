@@ -1,0 +1,117 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-cream);
+  color: var(--color-plum);
+  font-family: var(--font-body);
+  font-size: var(--size-body);
+}
+
+h1 {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: var(--size-title);
+  color: var(--color-plum);
+  margin: 0 0 var(--margin);
+}
+
+main {
+  padding: var(--margin);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--margin);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.logo {
+  height: 32px;
+}
+
+.muted {
+  color: var(--color-muted-plum);
+}
+
+.card {
+  background: var(--color-white);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  padding: var(--margin);
+}
+
+.sign-in {
+  display: grid;
+  gap: var(--margin);
+  max-width: 420px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: var(--weight-strong);
+}
+
+input {
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-button);
+  font: inherit;
+  color: var(--color-plum);
+  background: var(--color-white);
+}
+
+button {
+  min-height: var(--tap);
+  padding: 0 24px;
+  border: 1px solid var(--color-plum);
+  border-radius: var(--radius-button);
+  background: var(--color-plum);
+  color: var(--color-cream);
+  font: inherit;
+  font-weight: var(--weight-strong);
+  cursor: pointer;
+}
+
+button.secondary {
+  background: var(--color-white);
+  color: var(--color-plum);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-coral);
+  outline-offset: 2px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-white);
+  border: 1px solid var(--color-line);
+}
+
+th,
+td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--size-caption);
+}
+
+th {
+  color: var(--color-plum);
+  font-weight: var(--weight-strong);
+}

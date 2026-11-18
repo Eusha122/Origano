@@ -1,68 +1,49 @@
-import { taka } from '@oregano/domain';
-import { formatMoney, t } from '@oregano/i18n';
-import { colors, layout, typeScale } from '@oregano/ui';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocale } from '../locale';
-import { bodyFont, headingFont } from '../typography';
+import { queryKeys, useApi, useQuery } from '@oregano/app-core';
+import { t } from '@oregano/i18n';
+import { layout } from '@oregano/ui';
+import { Body, Button, Heading, Screen, useLocale } from '@oregano/ui-native';
+import { Link } from 'expo-router';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Card, ErrorState, pick } from '../components';
+import { TOWN_CENTRE } from '../config';
 
 export default function Home() {
   const { locale, setLocale } = useLocale();
-  const switchLabel = t(locale, 'language.switchTo');
+  const api = useApi();
+  const restaurants = useQuery({ queryKey: queryKeys.restaurants, queryFn: () => api.restaurants(TOWN_CENTRE) });
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <Screen scroll>
       <View style={styles.content}>
-        <Text role="heading" aria-level={1} style={[styles.title, { fontFamily: headingFont(locale) }]}>
-          {t(locale, 'brand.promise')}
-        </Text>
-        <Text style={[styles.body, { fontFamily: bodyFont(locale) }]}>{formatMoney(taka(280), locale)}</Text>
+        <Heading>{t(locale, 'brand.promise')}</Heading>
       </View>
-      <Pressable
-        role="button"
-        accessibilityLabel={switchLabel}
-        onPress={() => setLocale(locale === 'en' ? 'bn' : 'en')}
-        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-      >
-        <Text style={[styles.buttonText, { fontFamily: bodyFont(locale, true) }]}>{switchLabel}</Text>
-      </Pressable>
-    </SafeAreaView>
+      <Button label={t(locale, 'language.switchTo')} onPress={() => setLocale(locale === 'en' ? 'bn' : 'en')} />
+
+      <Heading level={2}>{t(locale, 'restaurant.listTitle')}</Heading>
+      {restaurants.isPending ? <ActivityIndicator /> : null}
+      {restaurants.isError ? <ErrorState error={restaurants.error} onRetry={() => void restaurants.refetch()} /> : null}
+      {restaurants.data && restaurants.data.zone === null ? <Body>{t(locale, 'zone.outside')}</Body> : null}
+      {restaurants.data && restaurants.data.zone !== null && restaurants.data.restaurants.length === 0 ? (
+        <Body>{t(locale, 'restaurant.noneYet')}</Body>
+      ) : null}
+      {restaurants.data?.restaurants.map((r) => {
+        const name = pick(locale, r.nameEn, r.nameBn);
+        return (
+          <Link key={r.id} href={`/r/${r.slug}`} asChild>
+            <Pressable role="link" accessibilityLabel={name}>
+              <Card>
+                <Heading level={2}>{name}</Heading>
+                <Body muted>{pick(locale, r.cuisineEn, r.cuisineBn)}</Body>
+                {r.isOpen ? null : <Body strong>{t(locale, 'restaurant.closed')}</Body>}
+              </Card>
+            </Pressable>
+          </Link>
+        );
+      })}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.cream,
-    paddingHorizontal: layout.screenMargin,
-    paddingBottom: layout.screenMargin,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: layout.screenMargin,
-  },
-  title: {
-    color: colors.plum,
-    fontSize: typeScale.title.size,
-  },
-  body: {
-    color: colors.mutedPlum,
-    fontSize: typeScale.body.size,
-  },
-  button: {
-    minHeight: layout.minTapTarget,
-    borderRadius: layout.buttonRadius,
-    backgroundColor: colors.plum,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: layout.screenMargin,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonText: {
-    color: colors.cream,
-    fontSize: typeScale.bodyStrong.size,
-  },
+  content: { gap: layout.screenMargin },
 });
