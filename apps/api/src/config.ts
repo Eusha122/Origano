@@ -7,7 +7,7 @@ export type Config = {
   redisUrl: string;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   otpSecret: string;
-  sessionTtlDays: number;
+  session: SessionLimits;
   corsOrigins: string[];
   devOtpPeek: boolean;
   /** Addresses of the proxies in front of the API whose X-Forwarded-For may be believed; false trusts none. */
@@ -28,6 +28,19 @@ export type Config = {
     secretAccessKey: string;
     forcePathStyle: boolean;
   };
+};
+
+export type SessionLimits = {
+  /** Access token lifetime. */
+  accessSeconds: number;
+  /** Refresh token lifetime, renewed on every use. */
+  refreshDays: number;
+  /** A session's longest life, however often it is refreshed. */
+  absoluteDays: number;
+  /** The same, for a team member. */
+  teamAbsoluteHours: number;
+  /** How long a just-replaced refresh token may be answered again. */
+  reuseGraceSeconds: number;
 };
 
 export type Limits = {
@@ -205,7 +218,13 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     redisUrl: v.REDIS_URL,
     logLevel: v.LOG_LEVEL,
     otpSecret: v.OTP_SECRET,
-    sessionTtlDays: v.SESSION_TTL_DAYS,
+    session: {
+      accessSeconds: 900,
+      refreshDays: v.SESSION_TTL_DAYS,
+      absoluteDays: 180,
+      teamAbsoluteHours: 12,
+      reuseGraceSeconds: 30,
+    },
     corsOrigins: v.CORS_ORIGINS,
     devOtpPeek: v.DEV_OTP_PEEK === 'true',
     trustProxy: v.TRUST_PROXY.length > 0 ? v.TRUST_PROXY : false,

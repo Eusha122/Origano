@@ -25,6 +25,7 @@
     "db:seed:demo": "tsx --env-file-if-exists=.env src/dev/seed-demo-cli.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.4.3",
     "@fastify/helmet": "^13.2.0",
     "@fastify/websocket": "^11.3.7",

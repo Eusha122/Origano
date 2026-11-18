@@ -50,6 +50,20 @@
       "when": 1794996150751,
       "tag": "0006_crazy_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794996575816,
+      "tag": "0007_tranquil_moondragon",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794996578038,
+      "tag": "0008_chubby_carlie_cooper",
+      "breakpoints": true
     }
   ]
 }

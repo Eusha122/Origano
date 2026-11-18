@@ -43,7 +43,7 @@ export async function signInWithForm(page: Page, request: APIRequestContext, pho
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
-/** Signs in through the API and returns the session token. */
+/** Signs in through the API and returns the access token. */
 export async function signInWithApi(request: APIRequestContext, phone: string): Promise<string> {
   const requested = await request.post(`${API_URL}/v1/auth/otp/request`, { data: { phone } });
   expect(requested.ok()).toBe(true);
@@ -51,7 +51,7 @@ export async function signInWithApi(request: APIRequestContext, phone: string): 
     data: { phone, code: await otpCode(request, phone) },
   });
   expect(verified.ok()).toBe(true);
-  return ((await verified.json()) as { token: string }).token;
+  return ((await verified.json()) as { accessToken: string }).accessToken;
 }
 
 export function bearer(token: string): { authorization: string } {

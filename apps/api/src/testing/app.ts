@@ -3,7 +3,7 @@ import { normalizeBdPhone } from '@oregano/domain';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp } from '../app';
-import { type Limits, loadConfig } from '../config';
+import { type Limits, loadConfig, type SessionLimits } from '../config';
 import type { Db } from '../db/client';
 import { type DemoIds, seedDemo } from '../dev/seed-demo';
 import { RealtimeHub } from '../events/realtime';
@@ -20,6 +20,8 @@ export function withTestApp(
     limitsProfile?: 'standard' | 'relaxed';
     limits?: Partial<Limits>;
     trustProxy?: string[];
+    /** Session lifetimes, for tests that need a short access token. */
+    session?: Partial<SessionLimits>;
   } = {},
 ): {
   app: () => FastifyInstance;
@@ -41,8 +43,13 @@ export function withTestApp(
     LIMITS_PROFILE: options.limitsProfile ?? 'relaxed',
     RATE_LIMIT_PREFIX: `test-${randomBytes(6).toString('hex')}`,
     TRUST_PROXY: options.trustProxy?.join(',') ?? '',
+    CORS_ORIGINS: 'http://localhost:8081',
   });
-  const config = { ...base, limits: { ...base.limits, ...options.limits } };
+  const config = {
+    ...base,
+    limits: { ...base.limits, ...options.limits },
+    session: { ...base.session, ...options.session },
+  };
   let instance: FastifyInstance | undefined;
   let ids: DemoIds | undefined;
   const otp = {
@@ -100,7 +107,7 @@ export function withTestApp(
       const code = await otp.last(normalised);
       const verified = await app().inject({ method: 'POST', url: '/v1/auth/otp/verify', payload: { phone, code } });
       if (verified.statusCode !== 200) throw new Error(`OTP verify failed: ${verified.body}`);
-      return (verified.json() as { token: string }).token;
+      return (verified.json() as { accessToken: string }).accessToken;
     },
     as: (token) => ({ authorization: `Bearer ${token}` }),
   };

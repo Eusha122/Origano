@@ -19,7 +19,7 @@ describe('loadConfig', () => {
       databaseUrl: 'postgres://u:p@localhost:5432/oregano',
       redisUrl: 'redis://localhost:6379',
       otpSecret: 'x'.repeat(40),
-      sessionTtlDays: 60,
+      session: { accessSeconds: 900, refreshDays: 60, absoluteDays: 180, teamAbsoluteHours: 12, reuseGraceSeconds: 30 },
       corsOrigins: [],
       devOtpPeek: false,
     });

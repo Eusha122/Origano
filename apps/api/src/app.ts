@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -13,7 +14,7 @@ import { healthRoutes, type ReadinessCheck } from './health/routes';
 import { registerAuth } from './identity/auth';
 import { devRoutes } from './identity/dev-routes';
 import { identityRoutes } from './identity/routes';
-import { findUserByToken } from './identity/sessions';
+import { authenticateAccess } from './identity/sessions';
 import type { SmsDeps } from './notifications/sms/queue';
 import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
@@ -101,10 +102,13 @@ export async function buildApp(deps: {
   });
 
   await app.register(helmet);
+  await app.register(cookie);
 
   // Only the listed origins may call the API from a browser; an empty list allows none.
   await app.register(cors, {
     origin: deps.config.corsOrigins,
+    // The refresh cookie travels on /v1/auth calls from the web apps.
+    credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
     // The apps quote the request id when something fails, so the browser must let them read it.
     exposedHeaders: ['x-request-id'],
@@ -128,6 +132,6 @@ export async function buildApp(deps: {
       { prefix: '/v1' },
     );
   }
-  if (services?.realtime) services.realtime.register(app, (token) => findUserByToken(services.db, token));
+  if (services?.realtime) services.realtime.register(app, (token) => authenticateAccess(services.db, token));
   return app;
 }

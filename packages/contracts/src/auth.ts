@@ -34,5 +34,18 @@ export const Me = z.object({
 });
 export type Me = z.infer<typeof Me>;
 
-export const SessionResponse = z.object({ token: z.string(), user: Me });
+/** A browser gets the refresh token in an httpOnly cookie, so `refreshToken` is null there. */
+export const SessionResponse = z.object({
+  accessToken: z.string(),
+  accessExpiresAt: z.iso.datetime(),
+  refreshToken: z.string().nullable(),
+  user: Me,
+});
 export type SessionResponse = z.infer<typeof SessionResponse>;
+
+/** Native apps send the refresh token in the body; browsers send it in the cookie and leave this empty. */
+export const RefreshBody = z.object({ refreshToken: z.string().min(20).max(200).optional() });
+export type RefreshBody = z.infer<typeof RefreshBody>;
+
+export const RefreshResponse = SessionResponse.omit({ user: true });
+export type RefreshResponse = z.infer<typeof RefreshResponse>;

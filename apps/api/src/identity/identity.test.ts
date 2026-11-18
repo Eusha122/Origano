@@ -29,9 +29,9 @@ describe('sign-in by OTP', () => {
     const body = verified.json();
     expect(body.user.phone).toBe('+8801711000099');
     expect(body.user.roles).toEqual(['customer']);
-    expect(body.token.length).toBeGreaterThanOrEqual(43);
+    expect(body.accessToken.length).toBeGreaterThanOrEqual(43);
 
-    const me = await t.app().inject({ method: 'GET', url: '/v1/me', headers: t.as(body.token) });
+    const me = await t.app().inject({ method: 'GET', url: '/v1/me', headers: t.as(body.accessToken) });
     expect(me.statusCode).toBe(200);
     expect(me.json()).toEqual(body.user);
   });
@@ -106,11 +106,11 @@ describe('sign-in by OTP', () => {
     await post(t, '/v1/auth/otp/request', { phone: '01711000001' });
     const code = (await t.otp.last('+8801711000001')) as string;
     const verified = await post(t, '/v1/auth/otp/verify', { phone: '01711000001', code });
-    const token = verified.json().token as string;
+    const token = verified.json().accessToken as string;
     const codes = await t.db.execute<{ code_hash: string }>(sql`SELECT code_hash FROM otp_challenges`);
     expect(codes.length).toBeGreaterThan(0);
     expect(codes.map((c) => c.code_hash)).not.toContain(code);
-    const tokens = await t.db.execute<{ token_hash: string }>(sql`SELECT token_hash FROM sessions`);
+    const tokens = await t.db.execute<{ token_hash: string }>(sql`SELECT token_hash FROM auth_tokens`);
     expect(tokens.length).toBeGreaterThan(0);
     expect(tokens.map((s) => s.token_hash)).not.toContain(token);
   });
@@ -150,7 +150,7 @@ describe('sign-in by OTP', () => {
 
   it('an expired or unknown token is unauthenticated', async () => {
     const token = await t.signIn('01711000001');
-    await t.db.execute(sql`UPDATE sessions SET expires_at = now() - interval '1 second'`);
+    await t.db.execute(sql`UPDATE auth_tokens SET expires_at = now() - interval '1 second'`);
     const expired = await t.app().inject({ method: 'GET', url: '/v1/me', headers: t.as(token) });
     expect(expired.statusCode).toBe(401);
     const unknown = await t.app().inject({ method: 'GET', url: '/v1/me', headers: t.as('not-a-real-token') });

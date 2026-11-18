@@ -19,7 +19,7 @@ export async function grantTeamRole(db: Db, phone: BdPhone, role: TeamRole, oper
       INSERT INTO team_members (user_id, role, granted_by_label) VALUES (${userId}, ${role}, ${operator})
       ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role, granted_by_label = EXCLUDED.granted_by_label,
         granted_at = now()`);
-    await revokeUserSessions(tx, userId);
+    await revokeUserSessions(tx, userId, 'team_change');
     await writeAudit(tx, {
       actor: { type: 'operator', label: operator },
       action: 'team.granted',
@@ -38,7 +38,7 @@ export async function revokeTeamRole(db: Db, phone: BdPhone, operator: string): 
       RETURNING user_id, role`);
     const row = removed[0];
     if (!row) return false;
-    await revokeUserSessions(tx, row.user_id);
+    await revokeUserSessions(tx, row.user_id, 'team_change');
     await writeAudit(tx, {
       actor: { type: 'operator', label: operator },
       action: 'team.revoked',

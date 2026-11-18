@@ -169,7 +169,7 @@ export function useSession(): SessionState & {
       const session = await api.verifyOtp(phone, code);
       queryClient.clear();
       queryClient.setQueryData(queryKeys.me, session.user);
-      setToken(session.token);
+      setToken(session.accessToken);
     },
     [api, queryClient, setToken],
   );

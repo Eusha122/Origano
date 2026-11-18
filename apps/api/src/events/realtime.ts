@@ -5,12 +5,17 @@ import type { FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import type { WebSocket } from 'ws';
 import { z } from 'zod';
-import type { AuthUser } from '../identity/sessions';
+import type { AuthUser, authenticateAccess } from '../identity/sessions';
 import type { OrderChangedPayload } from './outbox';
 import { EVENTS_CHANNEL } from './relay';
 
 const AUTH_TIMEOUT_MS = 5000;
 const PING_MS = 25_000;
+
+/** What the relay publishes: a topic, then its payload. */
+const Envelope = z.object({ topic: z.string(), payload: z.unknown() });
+const SessionRevoked = z.object({ sessionId: z.string() });
+const AccessChanged = z.object({ userId: z.string() });
 
 const OrderChanged = z.object({
   orderId: z.string(),
@@ -31,7 +36,12 @@ export function audienceIncludes(user: AuthUser, event: OrderChangedPayload): bo
   return offerable && user.rider?.status === 'approved' && user.rider.zoneId === event.zoneId;
 }
 
-type Connection = { socket: WebSocket; user: AuthUser };
+type Connection = { socket: WebSocket; user: AuthUser; sessionId: string; expiryTimer: NodeJS.Timeout };
+
+const CLOSE_AUTH = 4401;
+
+/** Longest delay setTimeout accepts. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 export class RealtimeHub {
   private subscriber: Redis | undefined;
@@ -57,9 +67,34 @@ export class RealtimeHub {
   }
 
   private dispatch(message: string): void {
+    let envelope: z.infer<typeof Envelope>;
+    try {
+      envelope = Envelope.parse(JSON.parse(message));
+    } catch {
+      return;
+    }
+    if (envelope.topic === 'order.changed') this.dispatchOrderChanged(envelope.payload);
+    else if (envelope.topic === 'session.revoked') {
+      const revoked = SessionRevoked.safeParse(envelope.payload);
+      if (revoked.success) this.closeWhere((c) => c.sessionId === revoked.data.sessionId);
+    } else if (envelope.topic === 'user.access_changed') {
+      // Roles, staff membership or rider status changed: reconnecting reloads who this user is.
+      const changed = AccessChanged.safeParse(envelope.payload);
+      if (changed.success) this.closeWhere((c) => c.user.id === changed.data.userId);
+    }
+  }
+
+  /** A closed socket reconnects with a fresh token, which is how a revoked or expired session stops hearing hints. */
+  private closeWhere(match: (connection: Connection) => boolean): void {
+    for (const connection of [...this.connections]) {
+      if (match(connection)) connection.socket.close(CLOSE_AUTH, 'session ended');
+    }
+  }
+
+  private dispatchOrderChanged(payload: unknown): void {
     let parsed: z.infer<typeof OrderChanged>;
     try {
-      parsed = OrderChanged.parse(JSON.parse(message));
+      parsed = OrderChanged.parse(payload);
     } catch {
       return;
     }
@@ -76,7 +111,7 @@ export class RealtimeHub {
     socket.send(JSON.stringify(message));
   }
 
-  register(app: FastifyInstance, authenticate: (token: string) => Promise<AuthUser | null>): void {
+  register(app: FastifyInstance, authenticate: (token: string) => ReturnType<typeof authenticateAccess>): void {
     app.register(async (scope) => {
       await scope.register(websocket, { options: { maxPayload: 4096 } });
       scope.get('/v1/realtime', { websocket: true }, (socket) => {
@@ -94,7 +129,10 @@ export class RealtimeHub {
           clearTimeout(authTimer);
           clearInterval(pingTimer);
           this.sockets.delete(socket);
-          if (connection) this.connections.delete(connection);
+          if (connection) {
+            clearTimeout(connection.expiryTimer);
+            this.connections.delete(connection);
+          }
         });
         socket.on('error', () => socket.terminate());
         socket.on('message', (data) => {
@@ -108,14 +146,19 @@ export class RealtimeHub {
           if (state !== 'waiting') return;
           state = 'authenticating';
           authenticate(message.token).then(
-            (user) => {
+            (live) => {
               if (socket.readyState !== socket.OPEN) return;
-              if (!user) {
-                socket.close(4401, 'invalid token');
+              if (!live) {
+                socket.close(CLOSE_AUTH, 'invalid token');
                 return;
               }
               clearTimeout(authTimer);
-              connection = { socket, user };
+              // The socket outlives nothing it was not allowed to: it closes when the access token does.
+              const expiryTimer = setTimeout(
+                () => socket.close(CLOSE_AUTH, 'token expired'),
+                Math.min(Math.max(live.expiresAt.getTime() - Date.now(), 0), MAX_TIMER_MS),
+              );
+              connection = { socket, user: live.user, sessionId: live.sessionId, expiryTimer };
               this.connections.add(connection);
               state = 'ready';
               this.send(socket, { type: 'ready' });

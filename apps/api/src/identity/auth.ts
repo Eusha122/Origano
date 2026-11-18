@@ -3,13 +3,15 @@ import { type Permission, teamCan } from '@oregano/domain';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Db } from '../db/client';
 import { AppError } from '../errors';
-import { type AuthUser, findUserByToken } from './sessions';
+import { type AuthUser, authenticateAccess } from './sessions';
 
 export type { AuthUser } from './sessions';
 
 declare module 'fastify' {
   interface FastifyRequest {
     user: AuthUser | null;
+    /** The session the access token belongs to, when signed in. */
+    sessionId: string | null;
   }
 }
 
@@ -24,9 +26,15 @@ export function bearerToken(request: FastifyRequest): string | null {
 /** Sets `request.user` from the Bearer token on every request. A bad token just leaves it null. */
 export function registerAuth(app: FastifyInstance, db: Db): void {
   app.decorateRequest('user', null);
+  app.decorateRequest('sessionId', null);
   app.addHook('onRequest', async (request) => {
     const token = bearerToken(request);
-    if (token) request.user = await findUserByToken(db, token);
+    if (!token) return;
+    const live = await authenticateAccess(db, token);
+    if (live) {
+      request.user = live.user;
+      request.sessionId = live.sessionId;
+    }
   });
 }
 

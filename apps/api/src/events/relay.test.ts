@@ -26,7 +26,11 @@ describe('relayOnce', () => {
     const publish = async (_channel: string, message: string) => sent.push(message);
     expect(await relayOnce(db, publish)).toBe(3);
     expect(await relayOnce(db, publish)).toBe(0);
-    expect(sent.map((m) => (JSON.parse(m) as { n: number }).n)).toEqual([1, 2, 3]);
+    expect(sent.map((m) => JSON.parse(m) as { topic: string; payload: { n: number } })).toEqual([
+      { topic: 'order.changed', payload: { n: 1 } },
+      { topic: 'order.changed', payload: { n: 2 } },
+      { topic: 'order.changed', payload: { n: 3 } },
+    ]);
     expect(await unpublished(db)).toBe(0);
   });
 

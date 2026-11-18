@@ -69,16 +69,52 @@ export const otpEvents = pgTable(
   ],
 );
 
-export const sessions = pgTable('sessions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull().unique(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+/** One sign-in on one device. Revoking it signs that device out; its tokens hang off it. */
+export const authSessions = pgTable(
+  'auth_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    client: text('client').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+    absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokeReason: text('revoke_reason'),
+  },
+  (table) => [
+    index('auth_sessions_user_idx').on(table.userId),
+    check('auth_sessions_client_valid', sql`${table.client} IN ('web', 'native')`),
+    check(
+      'auth_sessions_reason_valid',
+      sql`${table.revokeReason} IS NULL OR ${table.revokeReason} IN ('logout', 'reuse_detected', 'team_change', 'operator')`,
+    ),
+  ],
+);
+
+/** Access and refresh tokens, stored only as SHA-256. A refresh token's children are what replaced it. */
+export const authTokens = pgTable(
+  'auth_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => authSessions.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    parentId: uuid('parent_id'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('auth_tokens_session_idx').on(table.sessionId),
+    index('auth_tokens_parent_idx').on(table.parentId),
+    check('auth_tokens_kind_valid', sql`${table.kind} IN ('access', 'refresh')`),
+  ],
+);
 
 export const riders = pgTable(
   'riders',
