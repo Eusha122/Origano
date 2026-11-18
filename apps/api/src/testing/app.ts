@@ -37,7 +37,7 @@ export function withTestApp(
   const base = loadConfig({
     NODE_ENV: 'test',
     DATABASE_URL: 'postgres://u:p@localhost/x',
-    REDIS_URL: 'redis://localhost',
+    REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
     OTP_SECRET: 'test-only-otp-secret-0123456789abcdef',
     DEV_OTP_PEEK: options.devOtpPeek ? 'true' : 'false',
     DATA_KEYS: TEST_DATA_KEYS,
