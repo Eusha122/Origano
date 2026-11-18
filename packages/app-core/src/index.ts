@@ -30,3 +30,4 @@ export {
   useApi,
   useSession,
 } from './session';
+export { addVertex, fromPolygon, type LngLat, moveVertex, toPolygon, undoVertex } from './zone-ring';

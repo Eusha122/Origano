@@ -308,6 +308,7 @@ export const en = {
   'admin.tabRestaurants': 'Restaurants',
   'admin.tabAgencies': 'Agencies',
   'admin.tabTeam': 'Team',
+  'admin.tabZones': 'Zones',
   'admin.approve': 'Approve',
   'admin.reject': 'Reject',
   'admin.suspend': 'Suspend',

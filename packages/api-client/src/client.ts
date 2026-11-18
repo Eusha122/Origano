@@ -3,6 +3,7 @@ import {
   AdminOrderRow,
   AdminRestaurantRow,
   AdminRiderRow,
+  AdminZone,
   Agency,
   ApiErrorBody,
   ApplicationQueueItem,
@@ -45,6 +46,8 @@ import {
   SessionResponse,
   StaffMember,
   TeamMember,
+  type ZoneBody,
+  type ZonePatch,
 } from '@oregano/contracts';
 import type { ReadyMinutes, RejectReason } from '@oregano/domain';
 import { z } from 'zod';
@@ -159,6 +162,10 @@ export type ApiClient = {
   createDiscount(restaurantId: string, body: DiscountBody): Promise<Discount>;
   updateDiscount(restaurantId: string, discountId: string, patch: DiscountPatch): Promise<Discount>;
   deleteDiscount(restaurantId: string, discountId: string): Promise<void>;
+  /** Zones with their outlines and fees (superadmin). */
+  adminZones(): Promise<AdminZone[]>;
+  createZone(body: ZoneBody): Promise<AdminZone>;
+  updateZone(id: string, patch: ZonePatch): Promise<AdminZone>;
   staff(restaurantId: string): Promise<StaffMember[]>;
   addStaff(restaurantId: string, phone: string): Promise<StaffMember>;
   removeStaff(restaurantId: string, userId: string): Promise<void>;
@@ -467,6 +474,9 @@ export function createApiClient(opts: {
     myOrders: async () => (await get(Orders, '/v1/orders')).orders,
     order: (orderId) => get(Order, `/v1/orders/${id(orderId)}`),
     cancelOrder: (orderId) => post(Order, `/v1/orders/${id(orderId)}/cancel`),
+    adminZones: async () => (await get(z.object({ zones: z.array(AdminZone) }), '/v1/admin/zones')).zones,
+    createZone: (body) => post(AdminZone, '/v1/admin/zones', body),
+    updateZone: (zid, body) => patch(AdminZone, `/v1/admin/zones/${id(zid)}`, body),
     restaurantControls: (rid) => get(RestaurantControls, `/v1/restaurants/${id(rid)}/controls`),
     setRestaurantOpen: (rid, isOpen) => put(RestaurantControls, `/v1/restaurants/${id(rid)}/open`, { isOpen }),
     setBusyMode: (rid, extraMinutes) => put(RestaurantControls, `/v1/restaurants/${id(rid)}/busy`, { extraMinutes }),

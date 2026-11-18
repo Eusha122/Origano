@@ -7,6 +7,7 @@ export const TABS = [
   { id: 'riders', label: 'admin.tabRiders', permission: 'accounts.manage' },
   { id: 'restaurants', label: 'admin.tabRestaurants', permission: 'accounts.manage' },
   { id: 'agencies', label: 'admin.tabAgencies', permission: 'accounts.manage' },
+  { id: 'zones', label: 'admin.tabZones', permission: 'zones.manage' },
   { id: 'team', label: 'admin.tabTeam', permission: 'team.read' },
 ] as const satisfies ReadonlyArray<{ id: string; label: Parameters<typeof t>[1]; permission: Permission }>;
 

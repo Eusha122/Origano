@@ -311,6 +311,7 @@ export const bn: Record<MessageKey, string> = {
   'admin.tabRestaurants': 'Restaurants',
   'admin.tabAgencies': 'Agencies',
   'admin.tabTeam': 'Team',
+  'admin.tabZones': en['admin.tabZones'],
   'admin.approve': 'Approve',
   'admin.reject': 'Reject',
   'admin.suspend': 'Suspend',
