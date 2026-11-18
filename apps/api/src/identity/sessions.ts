@@ -115,7 +115,7 @@ export function refreshSession(
       WHERE t.token_hash = ${hashToken(refreshToken)} AND t.kind = 'refresh'
       FOR UPDATE OF t, s`);
     const row = rows[0];
-    if (!row || !row.usable) return 'invalid';
+    if (!row?.usable) return 'invalid';
 
     if (!row.used) {
       await tx.execute(sql`UPDATE auth_tokens SET used_at = now() WHERE id = ${row.id}`);

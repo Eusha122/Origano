@@ -8,9 +8,29 @@ export function subkey(secret: string, purpose: 'ip-hash' | 'doc-ticket'): Buffe
   return Buffer.from(hkdfSync('sha256', secret, '', `oregano:${purpose}`, 32));
 }
 
-/** A keyed hash of an IP address. The address itself is never stored. */
+/**
+ * The part of an address that identifies one client for limits. A single IPv6 host controls a whole /64, so
+ * rotating inside it must not give a fresh allowance; an IPv4-mapped IPv6 address is the IPv4 address.
+ */
+export function ipPrefix(ip: string): string {
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  if (mapped?.[1]) return mapped[1];
+  if (!ip.includes(':')) return ip;
+  const [head = '', tail = ''] = ip.split('::');
+  const first = head === '' ? [] : head.split(':');
+  const last = ip.includes('::') && tail !== '' ? tail.split(':') : [];
+  const groups = ip.includes('::')
+    ? [...first, ...Array(Math.max(8 - first.length - last.length, 0)).fill('0'), ...last]
+    : first;
+  return `${groups
+    .slice(0, 4)
+    .map((g) => Number.parseInt(g || '0', 16).toString(16))
+    .join(':')}::/64`;
+}
+
+/** A keyed hash of a client's address prefix. The address itself is never stored. */
 export function hashIp(key: Buffer, ip: string): string {
-  return createHmac('sha256', key).update(ip).digest('hex').slice(0, 32);
+  return createHmac('sha256', key).update(ipPrefix(ip)).digest('hex').slice(0, 32);
 }
 
 const b64 = (buffer: Buffer): string => buffer.toString('base64url');

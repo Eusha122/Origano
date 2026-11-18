@@ -5,6 +5,7 @@ import {
   decryptBytes,
   encryptBytes,
   hashIp,
+  ipPrefix,
   newDataKey,
   openString,
   sealString,
@@ -82,5 +83,25 @@ describe('hashIp', () => {
 
   it('derives different subkeys for different purposes', () => {
     expect(subkey('s'.repeat(40), 'ip-hash').equals(subkey('s'.repeat(40), 'doc-ticket'))).toBe(false);
+  });
+});
+
+describe('ipPrefix', () => {
+  it('leaves IPv4 alone and unwraps IPv4-mapped IPv6', () => {
+    expect(ipPrefix('203.0.113.9')).toBe('203.0.113.9');
+    expect(ipPrefix('::ffff:203.0.113.9')).toBe('203.0.113.9');
+  });
+
+  it('counts a whole IPv6 /64 as one client, in any spelling', () => {
+    const a = ipPrefix('2001:db8:1:2::1');
+    expect(ipPrefix('2001:db8:1:2:aaaa:bbbb:cccc:dddd')).toBe(a);
+    expect(ipPrefix('2001:0db8:0001:0002:0000:0000:0000:0001')).toBe(a);
+    expect(ipPrefix('2001:db8:1:3::1')).not.toBe(a);
+    expect(ipPrefix('::1')).toBe(ipPrefix('::2'));
+  });
+
+  it('hashes addresses in one /64 alike', () => {
+    const key = subkey('s'.repeat(40), 'ip-hash');
+    expect(hashIp(key, '2001:db8:1:2::1')).toBe(hashIp(key, '2001:db8:1:2::ffff'));
   });
 });

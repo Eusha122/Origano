@@ -1,9 +1,22 @@
+import type { BdPhone } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
+import { loadConfig } from '../config';
 import { withTestApp } from '../testing/app';
+import { TEST_DATA_KEYS } from '../testing/keys';
+import { verifyOtp } from './otp';
 import { parseOtpCommand, unlockPhone } from './otp-cli';
 
 type Harness = ReturnType<typeof withTestApp>;
+
+const standardLimits = () =>
+  loadConfig({
+    NODE_ENV: 'test',
+    DATABASE_URL: 'postgres://u:p@localhost/x',
+    REDIS_URL: 'redis://localhost',
+    OTP_SECRET: 'x'.repeat(40),
+    DATA_KEYS: TEST_DATA_KEYS,
+  }).limits;
 
 let counter = 0;
 /** A fresh valid phone, so one test never collides with another. */
@@ -108,26 +121,89 @@ describe('OTP limits (standard profile)', () => {
   });
 
   it('limits wrong guesses from one IP across many phones to 30 an hour', async () => {
-    for (let i = 0; i < 30; i++) {
-      const res = await verify(t, freshPhone(), '123456', '192.0.2.70');
+    const phones = Array.from({ length: 31 }, freshPhone);
+    for (const [i, phone] of phones.entries()) await request(t, phone, `198.51.100.${i + 1}`);
+    for (const phone of phones.slice(0, 30)) {
+      const res = await verify(t, phone, wrongCode(await codeOf(t, phone)), '192.0.2.70');
       expect(res.json().error.code).toBe('otp_invalid');
     }
-    const next = await verify(t, freshPhone(), '123456', '192.0.2.70');
+    const next = await verify(t, phones[30] as string, wrongCode(await codeOf(t, phones[30] as string)), '192.0.2.70');
     expect(next.statusCode).toBe(429);
     expect(next.json().error.code).toBe('otp_rate_limited');
-    expect((await verify(t, freshPhone(), '123456', '192.0.2.71')).json().error.code).toBe('otp_invalid');
+    const other = await verify(t, phones[30] as string, wrongCode(await codeOf(t, phones[30] as string)), '192.0.2.71');
+    expect(other.json().error.code).toBe('otp_invalid');
   });
 
-  it('does not let guesses for a phone with no code lock that phone', async () => {
+  it('answers alike, and charges nothing, for a number with no code, a used code and an unknown number', async () => {
+    const used = freshPhone();
+    await request(t, used);
+    expect((await verify(t, used, await codeOf(t, used))).statusCode).toBe(200);
+    const unknown = freshPhone();
+    for (let i = 0; i < 40; i++) {
+      for (const phone of [used, unknown]) {
+        const res = await verify(t, phone, '123456', '192.0.2.72');
+        expect([res.statusCode, res.json().error.code]).toEqual([401, 'otp_invalid']);
+      }
+    }
+    const events = await t.db.execute<{ n: number }>(
+      sql`SELECT count(*)::int AS n FROM otp_events WHERE kind <> 'send'`,
+    );
+    expect(events[0]?.n).toBe(0);
+    expect((await request(t, unknown, '192.0.2.73')).statusCode).toBe(202);
+  });
+
+  it('counts a whole IPv6 /64 as one address, so rotating inside it gains nothing', async () => {
+    for (let i = 0; i < 20; i++) {
+      expect((await request(t, freshPhone(), `2001:db8:77:1::${(i + 1).toString(16)}`)).statusCode).toBe(202);
+    }
+    const next = await request(t, freshPhone(), '2001:db8:77:1:aaaa::9');
+    expect(next.json().error.code).toBe('otp_rate_limited');
+    expect((await request(t, freshPhone(), '2001:db8:77:2::1')).statusCode).toBe(202);
+  });
+
+  it('never lets parallel wrong guesses push a phone past the daily cap of ten', async () => {
     const phone = freshPhone();
-    for (let i = 0; i < 12; i++) await verify(t, phone, '123456', `198.19.0.${i + 1}`);
-    expect((await request(t, phone, '198.19.1.1')).statusCode).toBe(202);
+    await t.db.execute(
+      sql`INSERT INTO otp_events (kind, phone, ip_hash) SELECT 'failure', ${e164(phone)}, 'seed' FROM generate_series(1, 9)`,
+    );
+    await request(t, phone);
+    const wrong = wrongCode(await codeOf(t, phone));
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => verify(t, phone, wrong, `198.18.50.${i + 1}`)),
+    );
+    const failures = await t.db.execute<{ n: number }>(
+      sql`SELECT count(*)::int AS n FROM otp_events WHERE kind = 'failure' AND phone = ${e164(phone)}`,
+    );
+    expect(failures[0]?.n).toBe(10);
+    expect(results.filter((r) => r.json().error.code === 'otp_locked')).toHaveLength(4);
+  });
+
+  it('warns once, with the masked number, the moment a phone becomes locked', async () => {
+    const phone = freshPhone();
+    await t.db.execute(
+      sql`INSERT INTO otp_events (kind, phone, ip_hash) SELECT 'failure', ${e164(phone)}, 'seed' FROM generate_series(1, 9)`,
+    );
+    await request(t, phone);
+    const warnings: object[] = [];
+    const log = { warn: (o: object) => void warnings.push(o), error: () => {} };
+    const deps = { secret: 'test-only-otp-secret-0123456789abcdef', limits: standardLimits(), log };
+    const attempt = verifyOtp(
+      t.db,
+      deps,
+      { phone: e164(phone) as BdPhone, ipHash: 'x' },
+      wrongCode(await codeOf(t, phone)),
+    );
+    await expect(attempt).rejects.toMatchObject({ code: 'otp_invalid' });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ event: 'otp_phone_locked', phone: expect.stringMatching(/^\+8801\*+\d{3}$/) });
   });
 
   it('leaves exactly one challenge and one SMS when two requests race', async () => {
     const phone = freshPhone();
     const [a, b] = await Promise.all([request(t, phone, '192.0.2.80'), request(t, phone, '192.0.2.81')]);
     expect([a.statusCode, b.statusCode].sort()).toEqual([202, 429]);
+    const loser = a.statusCode === 429 ? a : b;
+    expect(loser.json().error.code).toBe('otp_resend_too_soon');
     const rows = await t.db.execute<{ challenges: number; messages: number }>(sql`
       SELECT (SELECT count(*)::int FROM otp_challenges WHERE phone = ${e164(phone)}) AS challenges,
              (SELECT count(*)::int FROM sms_messages WHERE phone = ${e164(phone)}) AS messages`);
@@ -202,6 +278,16 @@ describe('OTP per-phone daily cap', () => {
     const eleventh = await request(t, phone);
     expect(eleventh.statusCode).toBe(429);
     expect(eleventh.json().error.code).toBe('otp_rate_limited');
+  });
+});
+
+describe('OTP parallel sends from one address', () => {
+  const t = withTestApp({ limitsProfile: 'standard', limits: { otpSendsPerIpHour: 5 } });
+
+  it('lets exactly the hourly number through when requests for different phones arrive together', async () => {
+    const results = await Promise.all(Array.from({ length: 12 }, () => request(t, freshPhone(), '192.0.2.150')));
+    expect(results.filter((r) => r.statusCode === 202)).toHaveLength(5);
+    expect(results.filter((r) => r.json().error?.code === 'otp_rate_limited')).toHaveLength(7);
   });
 });
 

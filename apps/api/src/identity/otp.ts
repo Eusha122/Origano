@@ -38,6 +38,10 @@ const locked = () =>
   );
 const limited = () => new AppError('otp_rate_limited', 429, 'Too many codes asked for. Try again later.');
 
+async function lock(tx: Executor, name: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${name}))`);
+}
+
 /** How many events of `kinds` match, inside a window counted by the database clock. */
 async function countEvents(
   tx: Executor,
@@ -73,7 +77,10 @@ export async function requestOtp(
   const codeHash = hashCode(deps.secret, phone, code).toString('hex');
 
   await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`otp:${phone}`}))`);
+    // Locks are always taken in this order (phone, address, platform), so they cannot deadlock. Each limit
+    // is counted under its own lock: without it, parallel requests all see the old count and all pass.
+    await lock(tx, `otp:${phone}`);
+    await lock(tx, `otp-ip:${ipHash}`);
 
     if ((await countEvents(tx, { phone }, ['failure'], '24 hours')) >= limits.otpFailuresPerPhoneDay) throw locked();
 
@@ -94,6 +101,7 @@ export async function requestOtp(
       throw limited();
     }
 
+    await lock(tx, 'otp-global');
     if ((await countEvents(tx, {}, ['send'], '1 hour')) >= limits.otpSendsGlobalHour) {
       deps.log?.error({ event: 'sms_budget_exceeded', limit: limits.otpSendsGlobalHour }, 'sms_budget_exceeded');
       throw new AppError('sms_unavailable', 503, 'We could not send a code right now. Try again in a few minutes.');
@@ -116,10 +124,14 @@ export async function requestOtp(
 
 type Challenge = { code_hash: string; attempts: number; consumed: boolean; expired: boolean };
 
+type Outcome = { error: AppError | null; lockedNow: boolean };
+
 /**
- * Checks a code. Wrong guesses are recorded in their own statement, outside any later transaction, so a
- * rejected code always uses up a try, and the counts outlive the code (a new code does not reset them).
- * Messages never reveal whether the phone has an account.
+ * Checks a code. The limit checks, the comparison and the record of a wrong guess happen in one short
+ * transaction under the phone's lock, so parallel guesses cannot all pass the same stale count, and the
+ * count outlives the code (a new code does not reset it). It commits before an error is thrown, so a
+ * rejected code always uses up a try. Every refusal that compares no code (no code asked for, used,
+ * expired) answers alike and costs the same, so the answer does not reveal whether a number has an account.
  */
 export async function verifyOtp(
   db: Db,
@@ -130,48 +142,47 @@ export async function verifyOtp(
   const { phone, ipHash } = ctx;
   const { limits } = deps;
 
-  if ((await countEvents(db, { ipHash }, ['failure', 'probe'], '1 hour')) >= limits.otpFailuresPerIpHour) {
-    throw limited();
-  }
-  if ((await countEvents(db, { phone }, ['failure'], '24 hours')) >= limits.otpFailuresPerPhoneDay) throw locked();
+  const outcome = await db.transaction(async (tx): Promise<Outcome> => {
+    await lock(tx, `otp:${phone}`);
+    await lock(tx, `otp-ip:${ipHash}`);
+    const refuse = (error: AppError, lockedNow = false): Outcome => ({ error, lockedNow });
 
-  const rows = await db.execute<Challenge>(sql`
-    SELECT code_hash, attempts, consumed_at IS NOT NULL AS consumed, expires_at <= now() AS expired
-    FROM otp_challenges WHERE phone = ${phone}`);
-  const challenge = rows[0];
-  if (!challenge) {
-    // Counts against the address only: guessing for a number that has no code must not lock that number.
-    await db.execute(sql`INSERT INTO otp_events (kind, phone, ip_hash) VALUES ('probe', ${phone}, ${ipHash})`);
-    throw invalid();
-  }
-  if (challenge.attempts >= limits.otpMaxAttempts) throw exceeded();
-  if (challenge.consumed) throw invalid();
-  if (challenge.expired) throw new AppError('otp_expired', 401, 'That code has expired. Ask for a new one.');
+    if ((await countEvents(tx, { ipHash }, ['failure'], '1 hour')) >= limits.otpFailuresPerIpHour) {
+      return refuse(limited());
+    }
+    if ((await countEvents(tx, { phone }, ['failure'], '24 hours')) >= limits.otpFailuresPerPhoneDay) {
+      return refuse(locked());
+    }
 
-  const expected = Buffer.from(challenge.code_hash, 'hex');
-  const actual = hashCode(deps.secret, phone, code);
-  if (expected.length === actual.length && timingSafeEqual(expected, actual)) return;
+    const rows = await tx.execute<Challenge>(sql`
+      SELECT code_hash, attempts, consumed_at IS NOT NULL AS consumed, expires_at <= now() AS expired
+      FROM otp_challenges WHERE phone = ${phone}`);
+    const challenge = rows[0];
+    if (!challenge) return refuse(invalid());
+    if (challenge.attempts >= limits.otpMaxAttempts) return refuse(exceeded());
+    if (challenge.consumed) return refuse(invalid());
+    if (challenge.expired) return refuse(new AppError('otp_expired', 401, 'That code has expired. Ask for a new one.'));
 
-  const updated = await db.execute<{ attempts: number }>(sql`
-    WITH bumped AS (
+    const expected = Buffer.from(challenge.code_hash, 'hex');
+    const actual = hashCode(deps.secret, phone, code);
+    if (expected.length === actual.length && timingSafeEqual(expected, actual))
+      return { error: null, lockedNow: false };
+
+    const bumped = await tx.execute<{ attempts: number }>(sql`
       UPDATE otp_challenges
       SET attempts = attempts + 1,
           consumed_at = CASE WHEN attempts + 1 >= ${limits.otpMaxAttempts} THEN now() ELSE consumed_at END
-      WHERE phone = ${phone} AND consumed_at IS NULL AND attempts < ${limits.otpMaxAttempts}
-      RETURNING attempts
-    ), noted AS (
-      INSERT INTO otp_events (kind, phone, ip_hash) SELECT 'failure', ${phone}, ${ipHash} FROM bumped
-    )
-    SELECT attempts FROM bumped`);
-  const attempts = updated[0]?.attempts;
-  if (attempts !== undefined) {
-    const failures = await countEvents(db, { phone }, ['failure'], '24 hours');
-    if (failures === limits.otpFailuresPerPhoneDay) {
-      deps.log?.warn({ event: 'otp_phone_locked', phone: maskPhone(phone), ipHash }, 'otp_phone_locked');
-    }
+      WHERE phone = ${phone} RETURNING attempts`);
+    await tx.execute(sql`INSERT INTO otp_events (kind, phone, ip_hash) VALUES ('failure', ${phone}, ${ipHash})`);
+    const lockedNow = (await countEvents(tx, { phone }, ['failure'], '24 hours')) === limits.otpFailuresPerPhoneDay;
+    const burned = (bumped[0]?.attempts ?? 0) >= limits.otpMaxAttempts;
+    return refuse(burned ? exceeded() : invalid(), lockedNow);
+  });
+
+  if (outcome.lockedNow) {
+    deps.log?.warn({ event: 'otp_phone_locked', phone: maskPhone(phone), ipHash }, 'otp_phone_locked');
   }
-  if (attempts !== undefined && attempts >= limits.otpMaxAttempts) throw exceeded();
-  throw invalid();
+  if (outcome.error) throw outcome.error;
 }
 
 /**
