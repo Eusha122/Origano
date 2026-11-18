@@ -6,3 +6,7 @@ export const realtimeUrl = `${apiUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}
 
 /** The delivery pin until the map arrives in Plan 05: the Chapainawabganj town centre. */
 export const TOWN_CENTRE = { lat: 24.5965, lng: 88.2775 } as const;
+
+/** Where the "Partner with Oregano" and "Ride with Oregano" links lead. Set these for anything but a developer machine. */
+export const restaurantAppUrl: string = process.env.EXPO_PUBLIC_RESTAURANT_APP_URL ?? 'http://localhost:8082';
+export const riderAppUrl: string = process.env.EXPO_PUBLIC_RIDER_APP_URL ?? 'http://localhost:8083';

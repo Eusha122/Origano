@@ -40,6 +40,21 @@ describe('i18n', () => {
     expect(t('en', 'error.validationFailed')).toBe('Some details are missing or wrong. Check them and try again.');
   });
 
+  it('has the restaurant application and staff strings, with labels staying English in Bangla', () => {
+    expect(t('en', 'apply.rejected', { reason: 'Photo is blurry' })).toBe(
+      'We could not approve your application: Photo is blurry',
+    );
+    expect(t('bn', 'apply.rejected', { reason: 'Photo is blurry' })).toContain('Photo is blurry');
+    expect(t('en', 'apply.underReview')).toBe('We are checking your details. This usually takes one to two days.');
+    expect(t('en', 'staff.empty')).toBe('No staff yet. Add them by phone number.');
+    // Buttons and field labels are English in both languages.
+    for (const key of ['apply.submit', 'apply.restaurantName', 'staff.add', 'doc.choose', 'payout.bkash'] as const) {
+      expect(messages.bn[key], key).toBe(messages.en[key]);
+    }
+    // Plain sentences are translated.
+    expect(messages.bn['apply.intro']).not.toBe(messages.en['apply.intro']);
+  });
+
   describe('order status words', () => {
     it('tells the customer a ready order is waiting for a rider until one claims it', () => {
       expect(t('en', orderStatusKey('ready', 'customer', false))).toBe('Ready. Waiting for a rider.');

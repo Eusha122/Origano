@@ -1,16 +1,21 @@
 import {
   AdminOrderRow,
   ApiErrorBody,
+  DocumentSummary,
   type ErrorCode,
   Me,
   Order,
   OtpRequestResponse,
   type PlaceOrderBody,
   RefreshResponse,
+  type RestaurantApplicationBody,
+  RestaurantApplicationView,
   RestaurantDetail,
   RestaurantListResponse,
+  RiderInvite,
   RiderOffer,
   SessionResponse,
+  StaffMember,
 } from '@oregano/contracts';
 import type { ReadyMinutes, RejectReason } from '@oregano/domain';
 import { z } from 'zod';
@@ -63,6 +68,12 @@ export function createMemorySessionStore(mode: SessionStore['mode'] = 'body'): S
   };
 }
 
+/**
+ * A file to upload. On the web it is the picked `File`; on a phone it is the asset's local uri with a name and type,
+ * which React Native's FormData sends as a file part.
+ */
+export type UploadFile = Blob | { uri: string; name: string; type: string };
+
 export type ApiClient = {
   /** Trades the refresh token for new tokens. False means the session is over and the user must sign in. */
   refresh(): Promise<boolean>;
@@ -87,13 +98,33 @@ export type ApiClient = {
   pickUp(id: string): Promise<Order>;
   deliver(id: string): Promise<Order>;
   adminOrders(): Promise<AdminOrderRow[]>;
+  /** The caller's restaurant application, or null when they have not started one. */
+  restaurantApplication(): Promise<RestaurantApplicationView | null>;
+  saveRestaurantApplication(body: RestaurantApplicationBody): Promise<RestaurantApplicationView>;
+  uploadRestaurantDocument(kind: string, file: UploadFile): Promise<DocumentSummary>;
+  submitRestaurantApplication(noTradeLicence: boolean): Promise<RestaurantApplicationView>;
+  staff(restaurantId: string): Promise<StaffMember[]>;
+  addStaff(restaurantId: string, phone: string): Promise<StaffMember>;
+  removeStaff(restaurantId: string, userId: string): Promise<void>;
+  riderInvites(restaurantId: string): Promise<RiderInvite[]>;
+  addRiderInvite(restaurantId: string, phone: string): Promise<RiderInvite>;
+  removeRiderInvite(restaurantId: string, phone: string): Promise<void>;
 };
 
 const Orders = z.object({ orders: z.array(Order) });
 const Offers = z.object({ offers: z.array(RiderOffer) });
 const AdminOrders = z.object({ orders: z.array(AdminOrderRow) });
+const Staff = z.object({ members: z.array(StaffMember) });
+const RiderInvites = z.object({ invites: z.array(RiderInvite) });
 
-type Request = { method: 'GET' | 'POST'; path: string; body?: unknown; headers?: Record<string, string> };
+type Request = {
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  path: string;
+  body?: unknown;
+  /** A file upload. Sent as multipart; the content type is left to the platform, which adds the boundary. */
+  form?: FormData;
+  headers?: Record<string, string>;
+};
 
 type RefreshOutcome = 'ok' | 'signed_out' | 'offline';
 
@@ -150,7 +181,7 @@ export function createApiClient(opts: {
       res = await doFetch(`${base}${req.path}`, {
         method: req.method,
         headers,
-        body: req.body === undefined ? undefined : JSON.stringify(req.body),
+        body: req.form ?? (req.body === undefined ? undefined : JSON.stringify(req.body)),
         ...(browserAuth ? { credentials: 'include' as const } : {}),
         signal,
       });
@@ -259,6 +290,17 @@ export function createApiClient(opts: {
 
   const get = <T>(schema: z.ZodType<T>, path: string) => call(schema, { method: 'GET', path });
   const post = <T>(schema: z.ZodType<T>, path: string, body?: unknown) => call(schema, { method: 'POST', path, body });
+  const put = <T>(schema: z.ZodType<T>, path: string, body?: unknown) => call(schema, { method: 'PUT', path, body });
+  /** A DELETE answers 204 with no body. */
+  const remove = async (path: string): Promise<void> => {
+    await send({ method: 'DELETE', path });
+  };
+  const upload = <T>(schema: z.ZodType<T>, path: string, file: UploadFile) => {
+    const form = new FormData();
+    // React Native's FormData takes the { uri, name, type } object as a file; the web takes a Blob.
+    form.append('file', file as Blob);
+    return call(schema, { method: 'POST', path, form });
+  };
   const id = encodeURIComponent;
 
   return {
@@ -302,6 +344,27 @@ export function createApiClient(opts: {
     pickUp: (orderId) => post(Order, `/v1/rider/orders/${id(orderId)}/pick-up`),
     deliver: (orderId) => post(Order, `/v1/rider/orders/${id(orderId)}/deliver`),
     adminOrders: async () => (await get(AdminOrders, '/v1/admin/orders')).orders,
+    restaurantApplication: async () => {
+      try {
+        return await get(RestaurantApplicationView, '/v1/onboarding/restaurant-application');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    saveRestaurantApplication: (body) => put(RestaurantApplicationView, '/v1/onboarding/restaurant-application', body),
+    uploadRestaurantDocument: (kind, file) =>
+      upload(DocumentSummary, `/v1/onboarding/restaurant-application/documents/${id(kind)}`, file),
+    submitRestaurantApplication: (noTradeLicence) =>
+      post(RestaurantApplicationView, '/v1/onboarding/restaurant-application/submit', { noTradeLicence }),
+    staff: async (restaurantId) => (await get(Staff, `/v1/restaurant/${id(restaurantId)}/staff`)).members,
+    addStaff: (restaurantId, phone) => post(StaffMember, `/v1/restaurant/${id(restaurantId)}/staff`, { phone }),
+    removeStaff: (restaurantId, userId) => remove(`/v1/restaurant/${id(restaurantId)}/staff/${id(userId)}`),
+    riderInvites: async (restaurantId) =>
+      (await get(RiderInvites, `/v1/restaurant/${id(restaurantId)}/rider-invites`)).invites,
+    addRiderInvite: (restaurantId, phone) =>
+      post(RiderInvite, `/v1/restaurant/${id(restaurantId)}/rider-invites`, { phone }),
+    removeRiderInvite: (restaurantId, phone) => remove(`/v1/restaurant/${id(restaurantId)}/rider-invites/${id(phone)}`),
   };
 }
 

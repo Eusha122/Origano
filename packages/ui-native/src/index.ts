@@ -1,5 +1,7 @@
 export { Body } from './Body';
 export { Button } from './Button';
+export { Choice } from './Choice';
+export { DocumentPicker, type PickedFile } from './DocumentPicker';
 export { useBrandFonts } from './fonts';
 export { Heading } from './Heading';
 export { LanguageButton } from './LanguageButton';

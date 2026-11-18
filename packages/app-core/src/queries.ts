@@ -10,6 +10,9 @@ export const queryKeys = {
   riderOrders: ['orders', 'rider'],
   adminOrders: ['orders', 'admin'],
   restaurants: ['restaurants'],
+  restaurantApplication: ['restaurant-application'],
+  staff: (restaurantId: string) => ['staff', restaurantId] as ['staff', string],
+  riderInvites: (restaurantId: string) => ['rider-invites', restaurantId] as ['rider-invites', string],
   restaurant: (slug: string) => ['restaurant', slug] as ['restaurant', string],
 } as const satisfies Record<string, readonly string[] | ((arg: string) => readonly string[])>;
 

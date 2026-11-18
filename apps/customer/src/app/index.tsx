@@ -3,9 +3,9 @@ import { t } from '@oregano/i18n';
 import { layout } from '@oregano/ui';
 import { Body, Button, Heading, Screen, useLocale } from '@oregano/ui-native';
 import { Link } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Card, ErrorState, pick } from '../components';
-import { TOWN_CENTRE } from '../config';
+import { restaurantAppUrl, riderAppUrl, TOWN_CENTRE } from '../config';
 
 export default function Home() {
   const { locale, setLocale } = useLocale();
@@ -40,10 +40,23 @@ export default function Home() {
           </Link>
         );
       })}
+      <View style={styles.links}>
+        <Button
+          label={t(locale, 'apply.partnerCta')}
+          variant="secondary"
+          onPress={() => void Linking.openURL(restaurantAppUrl)}
+        />
+        <Button
+          label={t(locale, 'apply.rideCta')}
+          variant="secondary"
+          onPress={() => void Linking.openURL(riderAppUrl)}
+        />
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: { gap: layout.screenMargin },
+  links: { gap: layout.screenMargin / 2 },
 });
