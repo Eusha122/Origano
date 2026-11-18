@@ -7,6 +7,7 @@ export const PERMISSIONS = [
   'documents.view',
   'accounts.manage',
   'team.read',
+  'zones.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

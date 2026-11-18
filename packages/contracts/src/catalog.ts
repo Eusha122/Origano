@@ -111,3 +111,63 @@ export type SearchResponse = z.infer<typeof SearchResponse>;
 
 export const PopularTermsResponse = z.object({ terms: z.array(z.string()) });
 export type PopularTermsResponse = z.infer<typeof PopularTermsResponse>;
+
+/** One ring of [longitude, latitude] positions, the first repeated at the end. No holes. */
+export const GeoPolygon = z.object({
+  type: z.literal('Polygon'),
+  coordinates: z
+    .array(
+      z
+        .array(z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]))
+        .min(1)
+        .max(600),
+    )
+    .length(1),
+});
+export type GeoPolygon = z.infer<typeof GeoPolygon>;
+
+const zoneName = z.string().trim().min(1).max(60);
+const feePerKm = z.number().int().min(0).max(20_000);
+const minFee = z.number().int().min(0).max(50_000);
+const roadFactor = z.number().min(1).max(3).multipleOf(0.01);
+
+export const ZoneBody = z.object({
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/),
+  nameEn: zoneName,
+  nameBn: zoneName,
+  boundary: GeoPolygon,
+  /** Poisha per km, Tk 0 to Tk 200. */
+  feePerKm,
+  /** Poisha, Tk 0 to Tk 500. */
+  minFee,
+  roadFactor,
+  timezone: z.string().max(40).optional(),
+});
+export type ZoneBody = z.infer<typeof ZoneBody>;
+
+export const ZonePatch = z
+  .object({
+    nameEn: zoneName.optional(),
+    nameBn: zoneName.optional(),
+    boundary: GeoPolygon.optional(),
+    feePerKm: feePerKm.optional(),
+    minFee: minFee.optional(),
+    roadFactor: roadFactor.optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to change' });
+export type ZonePatch = z.infer<typeof ZonePatch>;
+
+export const AdminZone = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  nameEn: z.string(),
+  nameBn: z.string(),
+  boundary: GeoPolygon,
+  feePerKm: z.number().int(),
+  minFee: z.number().int(),
+  roadFactor: z.number(),
+  timezone: z.string(),
+  isActive: z.boolean(),
+});
+export type AdminZone = z.infer<typeof AdminZone>;
