@@ -65,7 +65,8 @@ export async function liveDiscounts(db: Db, restaurantId: string, now: Date): Pr
 /** Categories in position order, each with its visible items. Empty categories are kept; archived items are not. */
 export async function getMenu(db: Db, restaurantId: string, now: Date): Promise<MenuCategoryRow[]> {
   const categories = await db.execute<{ id: string; name_en: string; name_bn: string }>(sql`
-    SELECT id, name_en, name_bn FROM menu_categories WHERE restaurant_id = ${restaurantId} ORDER BY position, name_en`);
+    SELECT id, name_en, name_bn FROM menu_categories WHERE restaurant_id = ${restaurantId} AND NOT is_archived
+    ORDER BY position, name_en`);
   const items = await db.execute<{
     id: string;
     category_id: string;

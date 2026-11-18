@@ -74,6 +74,8 @@ export const menuCategories = pgTable(
     nameEn: text('name_en').notNull(),
     nameBn: text('name_bn').notNull(),
     position: integer('position').notNull(),
+    /** Removed by the owner but kept, because archived items in it are referenced by past orders. */
+    isArchived: boolean('is_archived').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [unique('menu_categories_restaurant_name_unique').on(table.restaurantId, table.nameEn)],
