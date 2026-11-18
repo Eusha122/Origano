@@ -16,6 +16,7 @@ export {
   groupsFromItem,
   moveId,
   type OptionFormGroup,
+  optionsChanged,
   poishaToTakaText,
   takaToPoisha,
   validateItemForm,

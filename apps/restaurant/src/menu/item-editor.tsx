@@ -2,6 +2,7 @@ import {
   buildOptionsBody,
   groupsFromItem,
   type OptionFormGroup,
+  optionsChanged,
   poishaToTakaText,
   queryKeys,
   useApi,
@@ -45,6 +46,7 @@ export function ItemEditor(props: {
   const [groups, setGroups] = useState<OptionFormGroup[]>(item ? groupsFromItem(item.optionGroups) : []);
   const [hasPhoto, setHasPhoto] = useState(item?.imageUrl != null);
   const [formError, setFormError] = useState<'item' | 'options' | null>(null);
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.ownerMenu(restaurantId) });
 
@@ -61,10 +63,20 @@ export function ItemEditor(props: {
         return false;
       }
       setFormError(null);
-      const saved = item
-        ? await api.updateItem(restaurantId, item.id, form.body)
-        : await api.createItem(restaurantId, categoryId, form.body);
-      await api.setItemOptions(restaurantId, saved.id, options.body);
+      // If a new item was created but its options failed, saving again updates that item instead of creating a twin.
+      const existingId = item?.id ?? createdId;
+      let savedId: string;
+      if (existingId) {
+        await api.updateItem(restaurantId, existingId, form.body);
+        savedId = existingId;
+      } else {
+        savedId = (await api.createItem(restaurantId, categoryId, form.body)).id;
+        setCreatedId(savedId);
+      }
+      // Sending options replaces them all and gives each a new id, which breaks customers' carts: only send a change.
+      if (optionsChanged(item?.optionGroups ?? [], groups)) {
+        await api.setItemOptions(restaurantId, savedId, options.body);
+      }
       return true;
     },
     onSuccess: async (saved) => {

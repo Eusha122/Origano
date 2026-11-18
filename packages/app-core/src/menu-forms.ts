@@ -93,3 +93,19 @@ export function moveId(ids: readonly string[], id: string, delta: -1 | 1): strin
   next.splice(to, 0, id);
   return next;
 }
+
+/**
+ * Whether the option rows differ from what the item already has. Saving options replaces them all, which gives every
+ * option a new id and breaks the carts that hold the old ones, so an unchanged set must not be sent again.
+ */
+export function optionsChanged(saved: readonly OptionGroup[], rows: readonly OptionFormGroup[]): boolean {
+  const shape = (groups: readonly OptionFormGroup[]) =>
+    JSON.stringify(
+      groups.map((g) => [
+        g.name.trim(),
+        g.kind,
+        g.options.map((o) => [o.name.trim(), o.price.trim() === '' ? 0 : takaToPoisha(o.price), o.isAvailable ?? true]),
+      ]),
+    );
+  return shape(groupsFromItem(saved)) !== shape(rows);
+}

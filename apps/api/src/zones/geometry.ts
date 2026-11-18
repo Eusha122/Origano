@@ -26,6 +26,7 @@ export async function validateBoundary(
   db: Executor,
   ring: Ring,
   exceptZoneId?: string,
+  options: { checkOverlap?: boolean } = {},
 ): Promise<BoundaryProblem | null> {
   const first = ring[0];
   const last = ring[ring.length - 1];
@@ -46,11 +47,14 @@ export async function validateBoundary(
   const row = checked[0];
   if (!row?.valid || !(Number(row.km2) > 0)) return 'self_intersecting';
   if (Number(row.km2) > MAX_AREA_KM2) return 'too_large';
+  // A zone that is switched off may overlap others: it takes no orders until it is switched back on, and then it is checked.
+  if (options.checkOverlap === false) return null;
   const except = exceptZoneId ? sql`AND id <> ${exceptZoneId}` : sql``;
+  // Zones that only touch along an edge are neighbours, not overlaps: the insides must share some area.
   const overlap = await db.execute(sql`
     SELECT 1 FROM zones
     WHERE is_active ${except}
-      AND ST_Intersects(boundary, ST_ForcePolygonCCW(ST_SetSRID(ST_GeomFromText(${wkt}), 4326))::geography)
+      AND ST_Relate(boundary::geometry, ST_SetSRID(ST_GeomFromText(${wkt}), 4326), 'T********')
     LIMIT 1`);
   return overlap.length > 0 ? 'overlaps_zone' : null;
 }

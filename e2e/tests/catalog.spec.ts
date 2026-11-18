@@ -54,6 +54,7 @@ test('an owner runs the menu, a customer orders with options and a discount, and
   ).restaurantIds[0] as string;
   const coffee = (await findItem('Cold Coffee')) as PublicItem;
 
+  let orderId: string | null = null;
   const restaurant = await openApp(browser, APP_URLS.restaurant);
   await signInWithForm(restaurant, request, PHONES.owner);
   try {
@@ -127,6 +128,7 @@ test('an owner runs the menu, a customer orders with options and a discount, and
       },
     });
     expect(placed.status()).toBe(201);
+    orderId = ((await placed.json()) as { id: string }).id;
     const order = (await placed.json()) as {
       items: { unitPrice: number; discount: number; note: string }[];
       subtotal: number;
@@ -149,7 +151,11 @@ test('an owner runs the menu, a customer orders with options and a discount, and
     expect(refused.status()).toBe(422);
     expect(((await refused.json()) as { error: { code: string } }).error.code).toBe('item_unavailable');
   } finally {
-    // The other journeys order Cold Coffee, so put it back whatever happened above.
+    // The other journeys expect one new order and an orderable Cold Coffee: leave nothing of this one behind.
+    if (orderId) {
+      const token = await signInWithApi(request, PHONES.customer);
+      await request.post(`${API_URL}/v1/orders/${orderId}/cancel`, { headers: bearer(token) });
+    }
     await request.put(`${API_URL}/v1/restaurants/${restaurantId}/items/${coffee.id}/availability`, {
       headers: bearer(ownerToken),
       data: { isAvailable: true },

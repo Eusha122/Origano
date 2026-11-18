@@ -3,6 +3,8 @@ import {
   buildOptionsBody,
   groupsFromItem,
   moveId,
+  type OptionFormGroup,
+  optionsChanged,
   poishaToTakaText,
   takaToPoisha,
   validateItemForm,
@@ -157,5 +159,41 @@ describe('moveId', () => {
     expect(moveId(['a', 'b', 'c'], 'a', -1)).toEqual(['a', 'b', 'c']);
     expect(moveId(['a', 'b', 'c'], 'c', 1)).toEqual(['a', 'b', 'c']);
     expect(moveId(['a', 'b'], 'zzz', 1)).toEqual(['a', 'b']);
+  });
+});
+
+describe('optionsChanged', () => {
+  const saved = [
+    {
+      id: 'g1',
+      nameEn: 'Size',
+      nameBn: 'Size',
+      required: true,
+      minSelect: 1,
+      maxSelect: 1,
+      options: [{ id: 'o1', nameEn: 'Large', nameBn: 'Large', priceDelta: 3000, isAvailable: true }],
+    },
+  ];
+
+  it('is false for the rows read back from the item, even with spaces and a trailing .00', () => {
+    expect(optionsChanged(saved, groupsFromItem(saved))).toBe(false);
+    const rows = groupsFromItem(saved);
+    expect(
+      optionsChanged(saved, [{ ...rows[0], name: ' Size ', options: [{ name: 'Large ', price: '30.00' }] } as never]),
+    ).toBe(false);
+  });
+
+  it('is true for a new name, price, group or option, a removed row, or a changed kind', () => {
+    const rows = groupsFromItem(saved);
+    const first = rows[0] as OptionFormGroup;
+    expect(optionsChanged(saved, [{ ...first, name: 'Portion' }])).toBe(true);
+    expect(optionsChanged(saved, [{ ...first, options: [{ name: 'Large', price: '31' }] }])).toBe(true);
+    expect(optionsChanged(saved, [{ ...first, options: [...first.options, { name: 'Small', price: '0' }] }])).toBe(
+      true,
+    );
+    expect(optionsChanged(saved, [first, first])).toBe(true);
+    expect(optionsChanged(saved, [])).toBe(true);
+    expect(optionsChanged(saved, [{ ...first, kind: 'addons' }])).toBe(true);
+    expect(optionsChanged([], [])).toBe(false);
   });
 });

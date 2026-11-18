@@ -187,3 +187,51 @@ describe('menu manager', () => {
     expect(JSON.stringify(rows)).not.toContain('Secret dish name');
   });
 });
+
+describe('menu manager: Bangla text follows the English text', () => {
+  const t = withTestApp();
+  const call = async (method: 'PATCH', url: string, payload: unknown) =>
+    t.app().inject({
+      method,
+      url: `/v1/restaurants/${t.demo().restaurantId}${url}`,
+      payload: payload as object,
+      headers: t.as(await t.signIn(OWNER)),
+    });
+  const itemRow = async (id: string) =>
+    (
+      await t.db.execute<{
+        name_en: string;
+        name_bn: string;
+        description_en: string | null;
+        description_bn: string | null;
+      }>(sql`SELECT name_en, name_bn, description_en, description_bn FROM menu_items WHERE id = ${id}`)
+    )[0];
+
+  it('copies a new English name and description into Bangla, as the rules say, unless Bangla is sent', async () => {
+    const id = t.demo().menuItemIds.beefCheeseBurger;
+    expect((await call('PATCH', `/items/${id}`, { nameEn: 'Beef Deluxe', descriptionEn: 'Juicy' })).statusCode).toBe(
+      200,
+    );
+    expect(await itemRow(id)).toMatchObject({
+      name_en: 'Beef Deluxe',
+      name_bn: 'Beef Deluxe',
+      description_en: 'Juicy',
+      description_bn: 'Juicy',
+    });
+    await call('PATCH', `/items/${id}`, { nameEn: 'Beef Royal', nameBn: 'বিফ রয়্যাল' });
+    expect(await itemRow(id)).toMatchObject({ name_en: 'Beef Royal', name_bn: 'বিফ রয়্যাল' });
+    await call('PATCH', `/items/${id}`, { price: 30000 });
+    expect(await itemRow(id)).toMatchObject({ name_en: 'Beef Royal', name_bn: 'বিফ রয়্যাল' });
+  });
+
+  it('does the same for a category name', async () => {
+    const row = (await t.db.execute<{ id: string }>(sql`SELECT id FROM menu_categories ORDER BY position LIMIT 1`))[0];
+    expect((await call('PATCH', `/categories/${row?.id}`, { nameEn: 'Grills' })).statusCode).toBe(200);
+    const after = (
+      await t.db.execute<{ name_en: string; name_bn: string }>(
+        sql`SELECT name_en, name_bn FROM menu_categories WHERE id = ${row?.id}`,
+      )
+    )[0];
+    expect(after).toEqual({ name_en: 'Grills', name_bn: 'Grills' });
+  });
+});

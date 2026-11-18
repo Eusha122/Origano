@@ -237,3 +237,89 @@ describe('zones admin', () => {
     expect(rows[1]?.data).toEqual({ fields: 'feePerKm' });
   });
 });
+
+describe('zones admin: boundaries on switched-off zones, and neighbours', () => {
+  const t = withTestApp();
+  const call = async (method: 'GET' | 'POST' | 'PATCH', url: string, payload?: unknown) =>
+    t.app().inject({
+      method,
+      url: `/v1/admin/zones${url}`,
+      payload: payload as object,
+      headers: t.as(await t.signIn(SUPERADMIN)),
+    });
+  const townId = async () => (await call('GET', '')).json().zones[0].id as string;
+  const townRing = async () => (await call('GET', '')).json().zones[0].boundary.coordinates[0];
+  const bowTie = ring([
+    [88.55, 24.3],
+    [88.65, 24.4],
+    [88.65, 24.3],
+    [88.55, 24.4],
+  ]);
+
+  it('checks a new outline even when the same request switches the zone off', async () => {
+    const before = await townRing();
+    const res = await call('PATCH', `/${await townId()}`, { isActive: false, boundary: bowTie });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_zone');
+    const after = (await call('GET', '')).json().zones[0];
+    expect(after.boundary.coordinates[0]).toEqual(before);
+    expect(after.isActive).toBe(true);
+  });
+
+  it('checks an outline sent to a zone that is already switched off', async () => {
+    const id = await townId();
+    expect((await call('PATCH', `/${id}`, { isActive: false })).statusCode).toBe(200);
+    const res = await call('PATCH', `/${id}`, { boundary: bowTie });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_zone');
+    const tooMany = Array.from({ length: 550 }, (_, i): [number, number] => [
+      88.6 + 0.01 * Math.cos(i / 90),
+      24.3 + 0.01 * Math.sin(i / 90),
+    ]);
+    expect((await call('PATCH', `/${id}`, { boundary: ring(tooMany) })).statusCode).toBe(400);
+  });
+
+  it('lets a switched-off zone take an outline that overlaps others, until it is switched back on', async () => {
+    const id = await townId();
+    await call('PATCH', `/${id}`, { isActive: false });
+    const other = await call('POST', '', {
+      slug: 'rajshahi',
+      nameEn: 'Rajshahi',
+      nameBn: 'Rajshahi',
+      boundary: rajshahi,
+      feePerKm: 1000,
+      minFee: 2000,
+      roadFactor: 1.3,
+    });
+    expect(other.statusCode).toBe(201);
+    const overlapping = ring([
+      [88.55, 24.3],
+      [88.65, 24.3],
+      [88.65, 24.45],
+      [88.55, 24.45],
+    ]);
+    expect((await call('PATCH', `/${id}`, { boundary: overlapping })).statusCode).toBe(200);
+    const back = await call('PATCH', `/${id}`, { isActive: true });
+    expect(back.statusCode).toBe(400);
+    expect(back.json().error.code).toBe('invalid_zone');
+  });
+
+  it('accepts a zone that only shares an edge with another', async () => {
+    const neighbour = ring([
+      [88.33, 24.55],
+      [88.43, 24.55],
+      [88.43, 24.65],
+      [88.33, 24.65],
+    ]);
+    const res = await call('POST', '', {
+      slug: 'next-door',
+      nameEn: 'Next door',
+      nameBn: 'Next door',
+      boundary: neighbour,
+      feePerKm: 1000,
+      minFee: 2000,
+      roadFactor: 1.3,
+    });
+    expect(res.statusCode).toBe(201);
+  });
+});

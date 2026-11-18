@@ -47,7 +47,7 @@ export async function updateCategory(
   try {
     const rows = await tx.execute(sql`
       UPDATE menu_categories SET name_en = COALESCE(${patch.nameEn ?? null}, name_en),
-        name_bn = COALESCE(${patch.nameBn ?? null}, name_bn)
+        name_bn = COALESCE(${patch.nameBn ?? null}, ${patch.nameEn ?? null}, name_bn)
       WHERE id = ${categoryId} AND restaurant_id = ${restaurantId} AND NOT is_archived RETURNING id`);
     if (rows.length === 0) throw notFound();
   } catch (error) {
@@ -163,9 +163,10 @@ export async function updateItem(tx: Executor, restaurantId: string, itemId: str
     const rows = await tx.execute(sql`
       UPDATE menu_items SET
         name_en = COALESCE(${patch.nameEn ?? null}, name_en),
-        name_bn = COALESCE(${patch.nameBn ?? null}, name_bn),
+        name_bn = COALESCE(${patch.nameBn ?? null}, ${patch.nameEn ?? null}, name_bn),
         description_en = CASE WHEN ${hasDescEn} THEN ${patch.descriptionEn ?? null} ELSE description_en END,
-        description_bn = CASE WHEN ${hasDescBn} THEN ${patch.descriptionBn ?? null} ELSE description_bn END,
+        description_bn = CASE WHEN ${hasDescBn} THEN ${patch.descriptionBn ?? null}
+          WHEN ${hasDescEn} THEN ${patch.descriptionEn ?? null} ELSE description_bn END,
         price_poisha = COALESCE(${patch.price ?? null}, price_poisha),
         category_id = COALESCE(${patch.categoryId ?? null}::uuid, category_id)
       WHERE id = ${itemId} AND restaurant_id = ${restaurantId} AND NOT is_archived RETURNING id`);

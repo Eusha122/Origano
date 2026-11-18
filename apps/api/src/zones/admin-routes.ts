@@ -123,9 +123,10 @@ export function zoneAdminRoutes(app: FastifyInstance, { db }: Services): void {
       if (patch.isActive === false && current.isActive && (await countOpenOrdersInZone(tx, current.id)) > 0) {
         throw new AppError('zone_has_open_orders', 409, 'This zone still has open orders.');
       }
-      if (willBeActive && (patch.boundary !== undefined || patch.isActive === true)) {
+      // A new outline is always checked, even for a zone that is off; overlaps matter only while it is on.
+      if (patch.boundary !== undefined || (willBeActive && patch.isActive === true)) {
         const ring = (patch.boundary ?? current.boundary).coordinates[0] as Ring;
-        const problem = await validateBoundary(tx, ring, current.id);
+        const problem = await validateBoundary(tx, ring, current.id, { checkOverlap: willBeActive });
         if (problem) throw invalidZone(problemText[problem]);
       }
       await tx.execute(sql`
