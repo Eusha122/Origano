@@ -1,3 +1,4 @@
+import { TEAM_ROLES } from '@oregano/domain';
 import { z } from 'zod';
 
 export const OtpRequestBody = z.object({ phone: z.string().trim().min(1).max(30) });
@@ -23,6 +24,7 @@ export const Me = z.object({
   phone: z.string(),
   name: z.string().nullable(),
   roles: z.array(Role),
+  teamRoles: z.array(z.enum(TEAM_ROLES)),
   restaurantIds: z.array(z.uuid()),
   rider: z.object({ zoneId: z.uuid(), isOnline: z.boolean() }).nullable(),
 });

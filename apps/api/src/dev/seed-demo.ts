@@ -1,4 +1,4 @@
-import { type Money, normalizeBdPhone, taka } from '@oregano/domain';
+import { type Money, normalizeBdPhone, type TeamRole, taka } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { seedZones } from '../zones/seed';
@@ -30,13 +30,19 @@ async function one<T extends Record<string, unknown>>(rows: Promise<T[]>): Promi
   return row;
 }
 
-async function upsertUser(db: Db, local: string, name: string | null, isAdmin: boolean): Promise<string> {
+async function upsertUser(db: Db, local: string, name: string | null, team?: TeamRole): Promise<string> {
   const row = await one(
     db.execute<{ id: string }>(sql`
-      INSERT INTO users (phone, name, is_admin) VALUES (${phone(local)}, ${name}, ${isAdmin})
-      ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, is_admin = EXCLUDED.is_admin
+      INSERT INTO users (phone, name) VALUES (${phone(local)}, ${name})
+      ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
       RETURNING id`),
   );
+  await db.execute(sql`DELETE FROM team_members WHERE user_id = ${row.id}`);
+  if (team) {
+    await db.execute(
+      sql`INSERT INTO team_members (user_id, role, granted_by_label) VALUES (${row.id}, ${team}, 'demo seed')`,
+    );
+  }
   return row.id;
 }
 
@@ -91,11 +97,13 @@ export async function seedDemo(db: Db): Promise<DemoIds> {
   const zone = await one(db.execute<{ id: string }>(sql`SELECT id FROM zones WHERE slug = ${DEMO_ZONE_SLUG}`));
   const zoneId = zone.id;
 
-  const customerId = await upsertUser(db, '01711000001', null, false);
-  const ownerId = await upsertUser(db, '01711000002', 'Burger Lane owner', false);
-  const riderId = await upsertUser(db, '01711000003', 'Rahim', false);
-  const adminId = await upsertUser(db, '01711000004', 'Oregano admin', true);
-  const secondRiderId = await upsertUser(db, '01711000005', 'Karim', false);
+  const customerId = await upsertUser(db, '01711000001', null);
+  const ownerId = await upsertUser(db, '01711000002', 'Burger Lane owner');
+  const riderId = await upsertUser(db, '01711000003', 'Rahim');
+  const adminId = await upsertUser(db, '01711000004', 'Oregano admin', 'superadmin');
+  const secondRiderId = await upsertUser(db, '01711000005', 'Karim');
+  await upsertUser(db, '01711000006', 'Oregano onboarding', 'onboarding');
+  await upsertUser(db, '01711000007', 'Oregano support', 'support');
   await upsertRider(db, riderId, zoneId);
   await upsertRider(db, secondRiderId, zoneId);
 

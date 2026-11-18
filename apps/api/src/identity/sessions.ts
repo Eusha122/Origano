@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { BdPhone } from '@oregano/domain';
+import type { BdPhone, TeamRole } from '@oregano/domain';
 import { type SQL, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 
@@ -7,7 +7,7 @@ export type AuthUser = {
   id: string;
   phone: BdPhone;
   name: string | null;
-  isAdmin: boolean;
+  teamRoles: TeamRole[];
   restaurantIds: string[];
   rider: { zoneId: string; status: string; isOnline: boolean } | null;
 };
@@ -25,6 +25,11 @@ export async function createSession(db: Pick<Db, 'execute'>, userId: string, ttl
   return token;
 }
 
+/** Signs a user out everywhere. */
+export async function revokeUserSessions(db: Pick<Db, 'execute'>, userId: string): Promise<void> {
+  await db.execute(sql`UPDATE sessions SET revoked_at = now() WHERE user_id = ${userId} AND revoked_at IS NULL`);
+}
+
 export async function revokeSession(db: Db, token: string): Promise<void> {
   await db.execute(
     sql`UPDATE sessions SET revoked_at = now() WHERE token_hash = ${hashToken(token)} AND revoked_at IS NULL`,
@@ -35,7 +40,7 @@ type UserRow = {
   id: string;
   phone: string;
   name: string | null;
-  is_admin: boolean;
+  team_roles: TeamRole[];
   restaurant_ids: string[];
   rider_zone_id: string | null;
   rider_status: string | null;
@@ -44,7 +49,8 @@ type UserRow = {
 
 async function loadUser(db: Pick<Db, 'execute'>, where: SQL): Promise<AuthUser | null> {
   const rows = await db.execute<UserRow>(sql`
-    SELECT u.id, u.phone, u.name, u.is_admin,
+    SELECT u.id, u.phone, u.name,
+      COALESCE((SELECT array_agg(tm.role ORDER BY tm.role) FROM team_members tm WHERE tm.user_id = u.id), '{}') AS team_roles,
       COALESCE((SELECT array_agg(rs.restaurant_id::text ORDER BY rs.restaurant_id)
                 FROM restaurant_staff rs WHERE rs.user_id = u.id), '{}') AS restaurant_ids,
       r.zone_id AS rider_zone_id, r.status AS rider_status, r.is_online AS rider_is_online
@@ -57,7 +63,7 @@ async function loadUser(db: Pick<Db, 'execute'>, where: SQL): Promise<AuthUser |
     id: row.id,
     phone: row.phone as BdPhone,
     name: row.name,
-    isAdmin: row.is_admin,
+    teamRoles: row.team_roles,
     restaurantIds: row.restaurant_ids,
     rider:
       row.rider_zone_id === null

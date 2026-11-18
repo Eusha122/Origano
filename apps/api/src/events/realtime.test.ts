@@ -14,7 +14,7 @@ const user = (over: Partial<AuthUser> = {}): AuthUser => ({
   id: 'u1',
   phone: '+8801711000001' as BdPhone,
   name: null,
-  isAdmin: false,
+  teamRoles: [],
   restaurantIds: [],
   rider: null,
   ...over,
@@ -33,7 +33,8 @@ const rider = (id: string, zoneId: string, status = 'approved'): AuthUser =>
 
 describe('audienceIncludes', () => {
   const cases: [string, AuthUser, OrderChangedPayload, boolean][] = [
-    ['admin', user({ isAdmin: true }), event(), true],
+    ['a superadmin', user({ teamRoles: ['superadmin'] }), event(), true],
+    ['a support member', user({ teamRoles: ['support'] }), event(), true],
     ['the order customer', user({ id: 'c1' }), event(), true],
     ['another customer', user({ id: 'c2' }), event(), false],
     ['staff of the restaurant', user({ restaurantIds: ['r1'] }), event(), true],

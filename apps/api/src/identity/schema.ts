@@ -6,9 +6,21 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   phone: text('phone').notNull().unique(),
   name: text('name'),
-  isAdmin: boolean('is_admin').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    grantedByLabel: text('granted_by_label').notNull(),
+  },
+  (table) => [check('team_members_role_valid', sql`${table.role} IN ('superadmin', 'onboarding', 'support')`)],
+);
 
 export const otpChallenges = pgTable(
   'otp_challenges',

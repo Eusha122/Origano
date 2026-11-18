@@ -19,6 +19,7 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
+    "team": "tsx --env-file-if-exists=.env src/identity/team-cli.ts",
     "db:seed": "tsx --env-file-if-exists=.env src/dev/seed-cli.ts",
     "db:seed:demo": "tsx --env-file-if-exists=.env src/dev/seed-demo-cli.ts"
   },

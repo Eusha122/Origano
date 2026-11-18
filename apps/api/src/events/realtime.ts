@@ -1,5 +1,6 @@
 import websocket from '@fastify/websocket';
 import { RealtimeClientMessage, type RealtimeServerMessage } from '@oregano/contracts';
+import { teamCan } from '@oregano/domain';
 import type { FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import type { WebSocket } from 'ws';
@@ -22,7 +23,7 @@ const OrderChanged = z.object({
 
 /** Who may be told that an order changed. */
 export function audienceIncludes(user: AuthUser, event: OrderChangedPayload): boolean {
-  if (user.isAdmin) return true;
+  if (teamCan(user.teamRoles, 'orders.read')) return true;
   if (user.id === event.customerId) return true;
   if (user.restaurantIds.includes(event.restaurantId)) return true;
   if (event.riderId !== null) return user.id === event.riderId;

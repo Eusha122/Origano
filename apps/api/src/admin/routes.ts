@@ -3,7 +3,8 @@ import type { OrderStatus } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Services } from '../app';
-import { requireRole } from '../identity/auth';
+import { requirePermission } from '../identity/auth';
+import { listTeam } from '../identity/team';
 
 type Row = {
   id: string;
@@ -18,8 +19,13 @@ type Row = {
 };
 
 export function adminRoutes(app: FastifyInstance, { db }: Services): void {
+  app.get('/admin/team', async (request) => {
+    requirePermission(request, 'team.read');
+    return { members: await listTeam(db) };
+  });
+
   app.get('/admin/orders', async (request): Promise<{ orders: AdminOrderRow[] }> => {
-    requireRole(request, 'admin');
+    requirePermission(request, 'orders.read');
     const rows = await db.execute<Row>(sql`
       SELECT o.id, o.number, o.status, r.name_en AS restaurant_name_en,
         c.phone AS customer_phone, rd.name AS rider_name, rd.phone AS rider_phone,

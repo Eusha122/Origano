@@ -49,6 +49,7 @@ describe('deriveSession', () => {
     phone: '+8801711000001',
     name: null,
     roles: ['customer' as const],
+    teamRoles: [],
     restaurantIds: [],
     rider: null,
   };
