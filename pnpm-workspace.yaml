@@ -5,3 +5,10 @@ packages:
 allowBuilds:
   esbuild: true
   simple-git-hooks: false
+# picomatch ReDoS (GHSA-fc5q-39xc-vjpf): reaches us only through metro/jest-util,
+# the build tooling for the Expo apps. It is not in the API, the admin app or any
+# shipped bundle, and no patched version exists yet.
+# Remove this ignore as soon as picomatch ships a fix.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf

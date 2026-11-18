@@ -31,6 +31,8 @@ Monorepo, tooling, money rules, order state machine, language and brand packages
 
 ### Plan 02: First order, end to end
 
+**Status: done (18 November 2026).** All 16 tasks and the final review fixes are merged; `pnpm verify` and CI pass.
+
 The thinnest complete order: sign in by OTP (code printed to the server log, no SMS yet), one seeded restaurant with a menu, place a cash-on-delivery order, restaurant accepts and marks ready, rider claims, picks up and delivers, admin sees it live. Creates the restaurant, rider and admin app shells, `packages/contracts`, `packages/api-client`, the outbox, the worker and WebSocket hints.
 **Done when:** a Playwright test drives one order through all four web apps from placed to delivered, and a retried "place order" request does not create a second order.
 
