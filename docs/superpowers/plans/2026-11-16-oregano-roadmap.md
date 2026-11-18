@@ -11,7 +11,7 @@ The platform is too large for one plan. It is split into eleven plans, each endi
 | 01   | Foundation                         | none           | Done, merged 16 Nov 2026                                                                        |
 | 02   | First order, end to end            | 01             | Written: `2026-11-16-plan-02-first-order.md`                                                    |
 | 03   | Identity hardening and onboarding  | 02             | Done except Task 21 (two real SMS providers, waiting for the founder to name them), 18 Nov 2026 |
-| 04   | Catalog and zones, complete        | 02             | To write                                                                                        |
+| 04   | Catalog and zones, complete        | 02             | Written: `2026-11-18-plan-04-catalog-and-zones.md`                                              |
 | 05   | Customer experience, complete      | 03, 04         | To write                                                                                        |
 | 06   | Order operations and failure paths | 02             | To write                                                                                        |
 | 07   | Money                              | 06             | To write                                                                                        |
