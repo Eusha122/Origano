@@ -1,5 +1,5 @@
-import { ApiError, errorMessageKey as errorKey } from '@oregano/app-core';
-import { type Locale, type MessageKey, t } from '@oregano/i18n';
+import { errorMessageKey as errorKey } from '@oregano/app-core';
+import { type Locale, t } from '@oregano/i18n';
 import { colors, layout } from '@oregano/ui';
 import { Body, Button, useLocale } from '@oregano/ui-native';
 import type { ReactNode } from 'react';

@@ -47,6 +47,8 @@ export class RealtimeHub {
   private subscriber: Redis | undefined;
   private readonly connections = new Set<Connection>();
   private readonly sockets = new Set<WebSocket>();
+  /** Sessions revoked in the last minute, for a socket whose authentication was already under way. */
+  private readonly recentlyRevoked = new Map<string, number>();
 
   constructor(private readonly redisUrl: string) {}
 
@@ -76,12 +78,21 @@ export class RealtimeHub {
     if (envelope.topic === 'order.changed') this.dispatchOrderChanged(envelope.payload);
     else if (envelope.topic === 'session.revoked') {
       const revoked = SessionRevoked.safeParse(envelope.payload);
-      if (revoked.success) this.closeWhere((c) => c.sessionId === revoked.data.sessionId);
+      if (revoked.success) {
+        this.noteRevoked(revoked.data.sessionId);
+        this.closeWhere((c) => c.sessionId === revoked.data.sessionId);
+      }
     } else if (envelope.topic === 'user.access_changed') {
       // Roles, staff membership or rider status changed: reconnecting reloads who this user is.
       const changed = AccessChanged.safeParse(envelope.payload);
       if (changed.success) this.closeWhere((c) => c.user.id === changed.data.userId);
     }
+  }
+
+  private noteRevoked(sessionId: string): void {
+    const now = Date.now();
+    for (const [id, at] of this.recentlyRevoked) if (now - at > 60_000) this.recentlyRevoked.delete(id);
+    this.recentlyRevoked.set(sessionId, now);
   }
 
   /** A closed socket reconnects with a fresh token, which is how a revoked or expired session stops hearing hints. */
@@ -150,6 +161,10 @@ export class RealtimeHub {
               if (socket.readyState !== socket.OPEN) return;
               if (!live) {
                 socket.close(CLOSE_AUTH, 'invalid token');
+                return;
+              }
+              if (this.recentlyRevoked.has(live.sessionId)) {
+                socket.close(CLOSE_AUTH, 'session ended');
                 return;
               }
               clearTimeout(authTimer);

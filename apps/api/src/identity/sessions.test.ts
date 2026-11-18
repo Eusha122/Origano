@@ -85,26 +85,60 @@ describe('sessions', () => {
 
   it('a lost response does not sign the user out: the same token works again within 30 seconds', async () => {
     const r1 = (await nativeSession(t)).refreshToken;
-    const lost = (await refresh(t, r1)).json() as Tokens;
+    await refresh(t, r1); // the answer is lost on the way back
     const again = await refresh(t, r1);
     expect(again.statusCode).toBe(200);
     const retry = again.json() as Tokens;
-    // Whichever of the two answers the client ends up with must keep working, and nothing is revoked.
-    for (const answer of [lost, retry]) {
-      const step = await refresh(t, answer.refreshToken as string);
-      expect(step.statusCode).toBe(200);
-      expect((await me(t, (step.json() as Tokens).accessToken)).statusCode).toBe(200);
-    }
+    const step = await refresh(t, retry.refreshToken as string);
+    expect(step.statusCode).toBe(200);
+    expect((await me(t, (step.json() as Tokens).accessToken)).statusCode).toBe(200);
   });
 
-  it('two tabs refreshing at once both succeed, and either answer keeps working', async () => {
+  it('two tabs refreshing at once both succeed, and whichever answer reaches the cookie last keeps working', async () => {
     const r1 = (await nativeSession(t)).refreshToken;
     const [a, b] = await Promise.all([refresh(t, r1), refresh(t, r1)]);
     expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
-    for (const res of [a, b]) {
-      const step = await refresh(t, (res.json() as Tokens).refreshToken as string);
-      expect(step.statusCode).toBe(200);
+    const answers = [a, b].map((res) => (res.json() as Tokens).refreshToken as string);
+    for (const answer of answers) {
+      // Try each order: whichever one is redeemed first wins, and the browser only ever holds one of them.
+      expect(answer).toBeTruthy();
     }
+    const winner = await refresh(t, answers[1] as string);
+    expect(winner.statusCode).toBe(200);
+    expect((await me(t, (winner.json() as Tokens).accessToken)).statusCode).toBe(200);
+  });
+
+  it('once one answer is redeemed the others die, so a replaying thief cannot keep a second chain', async () => {
+    const stolen = (await nativeSession(t)).refreshToken;
+    const user = (await refresh(t, stolen)).json() as Tokens; // the real client
+    const thief = (await refresh(t, stolen)).json() as Tokens; // a copy, inside the grace window
+    const userNext = await refresh(t, user.refreshToken as string);
+    expect(userNext.statusCode).toBe(200);
+    // The user redeemed theirs, so the thief's sibling is dead: no second chain exists.
+    expect((await refresh(t, thief.refreshToken as string)).statusCode).toBe(401);
+    expect((await me(t, (userNext.json() as Tokens).accessToken)).statusCode).toBe(200);
+  });
+
+  it('and the other way round: if the thief redeems first, the user gets 401 once, never a second chain', async () => {
+    const stolen = (await nativeSession(t)).refreshToken;
+    const user = (await refresh(t, stolen)).json() as Tokens;
+    const thief = (await refresh(t, stolen)).json() as Tokens;
+    expect((await refresh(t, thief.refreshToken as string)).statusCode).toBe(200);
+    expect((await refresh(t, user.refreshToken as string)).statusCode).toBe(401);
+  });
+
+  it('a spent token whose answer was already used is theft, even inside the grace window', async () => {
+    const first = await nativeSession(t);
+    const second = (await refresh(t, first.refreshToken)).json() as Tokens;
+    expect((await refresh(t, second.refreshToken as string)).statusCode).toBe(200);
+    expect((await refresh(t, first.refreshToken)).statusCode).toBe(401);
+    expect((await me(t, second.accessToken)).statusCode).toBe(401);
+  });
+
+  it('parallel refreshes of one token never get past three answers', async () => {
+    const r1 = (await nativeSession(t)).refreshToken;
+    const results = await Promise.all(Array.from({ length: 6 }, () => refresh(t, r1)));
+    expect(results.filter((r) => r.statusCode === 200).length).toBeLessThanOrEqual(3);
   });
 
   it('a fourth use of one token inside the grace window is treated as theft', async () => {
@@ -169,6 +203,14 @@ describe('sessions', () => {
       { phone: '+8801711000001', hours: 180 * 24 },
       { phone: '+8801711000004', hours: 12 },
     ]);
+    const refreshHours = await t.db.execute<{ phone: string; hours: number }>(sql`
+      SELECT u.phone, round(extract(epoch FROM tk.expires_at - tk.created_at) / 3600)::int AS hours
+      FROM auth_tokens tk JOIN auth_sessions s ON s.id = tk.session_id JOIN users u ON u.id = s.user_id
+      WHERE tk.kind = 'refresh' ORDER BY u.phone`);
+    expect(refreshHours).toEqual([
+      { phone: '+8801711000001', hours: 60 * 24 },
+      { phone: '+8801711000004', hours: 12 },
+    ]);
   });
 
   it('logs out by access token or by refresh token, clears the cookie, and is safe to repeat', async () => {
@@ -190,6 +232,21 @@ describe('sessions', () => {
     expect(byCookie.cookies.find((c) => c.name === COOKIE)?.maxAge).toBe(0);
     expect((await me(t, web.json().accessToken)).statusCode).toBe(401);
     expect((await t.app().inject({ method: 'POST', url: '/v1/auth/logout' })).statusCode).toBe(204);
+  });
+
+  it('logs out with an expired access token by the refresh token, in the body for native apps', async () => {
+    const native = await nativeSession(t);
+    await t.db.execute(sql`UPDATE auth_tokens SET expires_at = now() - interval '1 second' WHERE kind = 'access'`);
+    const out = await t.app().inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      headers: t.as(native.accessToken),
+      payload: { refreshToken: native.refreshToken },
+    });
+    expect(out.statusCode).toBe(204);
+    expect((await refresh(t, native.refreshToken)).statusCode).toBe(401);
+    const revoked = await t.db.execute<{ revoke_reason: string }>(sql`SELECT revoke_reason FROM auth_sessions`);
+    expect(revoked).toEqual([{ revoke_reason: 'logout' }]);
   });
 
   it('stores only hashes of both tokens', async () => {

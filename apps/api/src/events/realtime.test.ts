@@ -180,13 +180,23 @@ describe('realtime sessions', () => {
     expect(await closed).toBe(4401);
   });
 
-  it('closes a socket with 4401 when its user loses access, for example removed from a restaurant', async () => {
+  it('closes every socket of a user whose sessions are all revoked', async () => {
     const token = await t.signIn('01711000002');
     const ws = await live(token);
     const closed = closeCode(ws);
     const id = await userId('+8801711000002');
     await t.db.transaction((tx) => revokeUserSessions(tx, id, 'operator'));
     await relay();
+    expect(await closed).toBe(4401);
+  });
+
+  it('closes a socket with 4401 when the user.access_changed message names its user', async () => {
+    const ws = await live(await t.signIn('01711000002'));
+    const closed = closeCode(ws);
+    await publisher.publish(
+      EVENTS_CHANNEL,
+      envelope({ userId: await userId('+8801711000002') }, 'user.access_changed'),
+    );
     expect(await closed).toBe(4401);
   });
 

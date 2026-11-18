@@ -13,7 +13,7 @@ import type { Services } from '../app';
 import type { Config } from '../config';
 import { AppError } from '../errors';
 import { hashIp, subkey } from '../security/crypto';
-import { bearerToken, requireUser, toMe } from './auth';
+import { requireUser, toMe } from './auth';
 import { consumeChallenge, requestOtp, verifyOtp } from './otp';
 import {
   findOrCreateUser,
@@ -134,9 +134,9 @@ export function identityRoutes(app: FastifyInstance, config: Config, { db, sms }
 
   // Safe to repeat, and never an error: signing out must always work, even with an expired access token.
   app.post('/auth/logout', async (request, reply) => {
-    const bearer = bearerToken(request);
     let sessionId = request.sessionId;
-    if (!sessionId && !bearer) {
+    // An expired access token identifies nobody, and most sign-outs happen after the 15 minutes are up.
+    if (!sessionId) {
       const { token } = presentedRefreshToken(request);
       if (token) sessionId = await sessionOfRefreshToken(db, token);
     }

@@ -86,19 +86,22 @@ type RefreshRow = {
   id: string;
   session_id: string;
   user_id: string;
+  parent_id: string | null;
   used: boolean;
   used_ago: number | null;
-  children: number;
   usable: boolean;
 };
 
 /**
  * Trades a refresh token for a new pair. 'invalid' means unknown, expired or revoked. 'reused' means the
- * token was spent long ago: someone else may hold a copy, so the whole session is revoked.
+ * token was spent long ago, or its answer was already put to use: someone else may hold a copy, so the
+ * whole session is revoked.
  *
  * A token spent a moment ago is answered again with a sibling pair (up to three times), because on a weak
- * connection the first answer may never have arrived, and two browser tabs may refresh together. The
- * earlier answers stay valid: whichever one reaches the shared cookie last must still work.
+ * connection the first answer may never have arrived, and two browser tabs may refresh together. But only
+ * one answer may ever be redeemed: the moment a sibling is redeemed, its unused siblings die. Otherwise
+ * a thief who replayed the token inside the window would keep a second chain of tokens that reuse
+ * detection never sees, for the rest of the session. A real client holds one answer, so nothing is lost.
  */
 export function refreshSession(
   db: Db,
@@ -107,9 +110,8 @@ export function refreshSession(
 ): Promise<IssuedTokens | 'invalid' | 'reused'> {
   return db.transaction(async (tx) => {
     const rows = await tx.execute<RefreshRow>(sql`
-      SELECT t.id, t.session_id, s.user_id, t.used_at IS NOT NULL AS used,
+      SELECT t.id, t.session_id, s.user_id, t.parent_id, t.used_at IS NOT NULL AS used,
         extract(epoch FROM now() - t.used_at)::float AS used_ago,
-        (SELECT count(*)::int FROM auth_tokens c WHERE c.parent_id = t.id) AS children,
         (t.expires_at > now() AND s.revoked_at IS NULL AND s.absolute_expires_at > now()) AS usable
       FROM auth_tokens t JOIN auth_sessions s ON s.id = t.session_id
       WHERE t.token_hash = ${hashToken(refreshToken)} AND t.kind = 'refresh'
@@ -119,10 +121,26 @@ export function refreshSession(
 
     if (!row.used) {
       await tx.execute(sql`UPDATE auth_tokens SET used_at = now() WHERE id = ${row.id}`);
+      if (row.parent_id !== null) {
+        await tx.execute(sql`
+          UPDATE auth_tokens SET expires_at = now()
+          WHERE parent_id = ${row.parent_id} AND id <> ${row.id} AND kind = 'refresh'
+            AND used_at IS NULL AND expires_at > now()`);
+      }
       return issueTokens(tx, row.session_id, row.id, limits);
     }
+
+    // Counted in a statement of its own, after the lock: a request that waited for the lock must see the
+    // children the request ahead of it created.
+    const counts = await tx.execute<{ children: number; redeemed: number }>(sql`
+      SELECT count(*)::int AS children, count(used_at)::int AS redeemed FROM auth_tokens WHERE parent_id = ${row.id}`);
+    const children = counts[0]?.children ?? 0;
+    const redeemed = counts[0]?.redeemed ?? 0;
     const recent = row.used_ago !== null && row.used_ago <= limits.reuseGraceSeconds;
-    if (recent && row.children < MAX_GRACE_CHILDREN) return issueTokens(tx, row.session_id, row.id, limits);
+    // A child that was used proves the client received an answer, so a lost response is no excuse.
+    if (recent && redeemed === 0 && children < MAX_GRACE_CHILDREN) {
+      return issueTokens(tx, row.session_id, row.id, limits);
+    }
 
     await revokeSession(tx, row.session_id, 'reuse_detected');
     await writeAudit(tx, {

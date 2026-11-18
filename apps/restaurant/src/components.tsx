@@ -1,5 +1,5 @@
-import { ApiError, errorMessageKey as errorKey } from '@oregano/app-core';
-import { type MessageKey, t } from '@oregano/i18n';
+import { errorMessageKey as errorKey } from '@oregano/app-core';
+import { t } from '@oregano/i18n';
 import { layout } from '@oregano/ui';
 import { Body, Button, useLocale } from '@oregano/ui-native';
 import { StyleSheet, View } from 'react-native';

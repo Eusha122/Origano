@@ -1,5 +1,5 @@
 import { errorMessageKey as errorKey, useApi, useMutation } from '@oregano/app-core';
-import { type MessageKey, t } from '@oregano/i18n';
+import { t } from '@oregano/i18n';
 import { type FormEvent, useState } from 'react';
 
 /** Phone number, then the 6-digit code. The team signs in the same way as the apps. */
