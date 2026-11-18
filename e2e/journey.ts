@@ -95,12 +95,29 @@ export async function orderNumber(page: Page): Promise<number> {
 
 const contexts: BrowserContext[] = [];
 
-/** One browser context per person, so each keeps its own session, as on separate phones. */
+/**
+ * One browser context per person, so each keeps its own session, as on separate phones. With a phone, the
+ * context is signed in first, the way a real browser is: the sign-in comes from the app's own origin, so the
+ * httpOnly refresh cookie lands in the context, and the app finds a remembered session when it loads.
+ */
 export async function openApp(browser: Browser, url: string, signedInAs?: string): Promise<Page> {
   const context = await browser.newContext();
   contexts.push(context);
-  // A session token from signInWithApi, placed where the apps keep it, before any page script runs.
-  if (signedInAs) await context.addInitScript((token) => localStorage.setItem('oregano.session', token), signedInAs);
+  if (signedInAs) {
+    const origin = new URL(url).origin;
+    const headers = { origin };
+    const requested = await context.request.post(`${API_URL}/v1/auth/otp/request`, {
+      data: { phone: signedInAs },
+      headers,
+    });
+    expect(requested.ok()).toBe(true);
+    const verified = await context.request.post(`${API_URL}/v1/auth/otp/verify`, {
+      data: { phone: signedInAs, code: await otpCode(context.request, signedInAs) },
+      headers,
+    });
+    expect(verified.ok()).toBe(true);
+    await context.addInitScript(() => localStorage.setItem('oregano.hasSession', '1'));
+  }
   const page = await context.newPage();
   await page.goto(url);
   return page;

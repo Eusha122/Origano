@@ -34,7 +34,7 @@ test('a ready order with no rider yet says it is waiting for one; the rider read
   expect(accepted.ok()).toBe(true);
   expect((await request.post(`${API_URL}/v1/restaurant/orders/${orderId}/ready`, { headers: owner })).ok()).toBe(true);
 
-  const customer = await openApp(browser, `${APP_URLS.customer}/orders/${orderId}`, customerToken);
+  const customer = await openApp(browser, `${APP_URLS.customer}/orders/${orderId}`, PHONES.customer);
   await expect(customer.getByText('Ready. Waiting for a rider.', { exact: true })).toBeVisible();
 
   const riderToken = await signInWithApi(request, PHONES.secondRider);
@@ -46,7 +46,7 @@ test('a ready order with no rider yet says it is waiting for one; the rider read
   expect(claimed.ok()).toBe(true);
   await expect(customer.getByText('Ready. Your rider is collecting it.', { exact: true })).toBeVisible();
 
-  const rider = await openApp(browser, APP_URLS.rider, riderToken);
+  const rider = await openApp(browser, APP_URLS.rider, PHONES.secondRider);
   await expect(rider.getByText('Ready. Collect it from the restaurant.', { exact: true })).toBeVisible();
   await expect(rider.getByText('Ready. Your rider is collecting it.', { exact: true })).toHaveCount(0);
   await rider.getByRole('button', { name: 'বাংলা', exact: true }).click();

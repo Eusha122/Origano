@@ -1,7 +1,7 @@
 import { ApiError } from '@oregano/api-client';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deriveSession, handleAuthFailed, handleOrderHint, queryKeys, webTokenStorage } from './index';
+import { createWebSessionStore, deriveSession, handleAuthFailed, handleOrderHint, queryKeys } from './index';
 
 describe('query keys and hints', () => {
   it('a hint invalidates the order and every list', async () => {
@@ -90,22 +90,50 @@ describe('deriveSession', () => {
   });
 });
 
-describe('webTokenStorage', () => {
+describe('createWebSessionStore', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps the token in localStorage', () => {
+  const stubStorage = () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => store.set(k, v),
       removeItem: (k: string) => store.delete(k),
     });
-    webTokenStorage.set('abc');
-    expect(webTokenStorage.get()).toBe('abc');
-    webTokenStorage.clear();
-    expect(webTokenStorage.get()).toBeNull();
+    return store;
+  };
+
+  it('keeps the access token in memory and only a non-secret flag in localStorage', () => {
+    const store = stubStorage();
+    const session = createWebSessionStore();
+    expect(session.mode).toBe('cookie');
+    expect(session.hasSession?.()).toBe(false);
+    session.save({ accessToken: 'secret-access', refreshToken: null });
+    expect(session.getAccessToken()).toBe('secret-access');
+    expect(session.getRefreshToken()).toBeNull();
+    expect(session.hasSession?.()).toBe(true);
+    expect([...store.values()]).toEqual(['1']);
+    session.clear();
+    expect(session.getAccessToken()).toBeNull();
+    expect(session.hasSession?.()).toBe(false);
+    expect(store.size).toBe(0);
+  });
+
+  it('a new page load remembers there was a session, but not the token', () => {
+    stubStorage();
+    createWebSessionStore().save({ accessToken: 'secret-access', refreshToken: null });
+    const reloaded = createWebSessionStore();
+    expect(reloaded.getAccessToken()).toBeNull();
+    expect(reloaded.hasSession?.()).toBe(true);
+  });
+
+  it('removes the old long-lived token that earlier versions kept in localStorage', () => {
+    const store = stubStorage();
+    store.set('oregano.session', 'old-token');
+    createWebSessionStore();
+    expect(store.has('oregano.session')).toBe(false);
   });
 
   it('never throws when localStorage throws or is missing', () => {
@@ -113,10 +141,29 @@ describe('webTokenStorage', () => {
       throw new Error('SecurityError');
     };
     vi.stubGlobal('localStorage', { getItem: throwing, setItem: throwing, removeItem: throwing });
-    expect(webTokenStorage.get()).toBeNull();
-    expect(() => webTokenStorage.set('abc')).not.toThrow();
-    expect(() => webTokenStorage.clear()).not.toThrow();
+    const session = createWebSessionStore();
+    expect(session.hasSession?.()).toBe(false);
+    expect(() => session.save({ accessToken: 'a', refreshToken: null })).not.toThrow();
+    expect(session.getAccessToken()).toBe('a');
+    expect(() => session.clear()).not.toThrow();
     vi.stubGlobal('localStorage', undefined);
-    expect(webTokenStorage.get()).toBeNull();
+    expect(createWebSessionStore().hasSession?.()).toBe(false);
+  });
+});
+
+describe('deriveSession while a stored session is being restored', () => {
+  it('counts as signed in and loading, never as signed out', () => {
+    expect(
+      deriveSession({ token: null, data: undefined, error: null, isPending: true, restoring: true }),
+    ).toMatchObject({
+      me: null,
+      isSignedIn: true,
+      isLoading: true,
+      expired: false,
+    });
+    expect(deriveSession({ token: null, data: undefined, error: null, isPending: true })).toMatchObject({
+      isSignedIn: false,
+      isLoading: false,
+    });
   });
 });

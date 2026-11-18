@@ -116,4 +116,32 @@ describe('connectRealtime with a fake socket', () => {
     expect(FakeSocket.instances).toHaveLength(3);
     conn.close();
   });
+
+  it('on a 4401 close renews the session and reconnects with the new token, or stops when it cannot', async () => {
+    let token = 'old';
+    let renew = true;
+    const refresh = vi.fn(async () => {
+      if (renew) token = 'new';
+      return renew;
+    });
+    const conn = connectRealtime({
+      url: 'ws://x',
+      getToken: () => token,
+      onHint: () => {},
+      refresh,
+      WebSocketImpl: Impl,
+    });
+    FakeSocket.instances[0]?.drop(4401);
+    await vi.waitFor(() => expect(FakeSocket.instances).toHaveLength(2));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    FakeSocket.instances[1]?.open();
+    expect(FakeSocket.instances[1]?.sent).toEqual([JSON.stringify({ type: 'auth', token: 'new' })]);
+
+    renew = false;
+    FakeSocket.instances[1]?.drop(4401);
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(FakeSocket.instances).toHaveLength(2);
+    conn.close();
+  });
 });

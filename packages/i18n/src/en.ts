@@ -94,6 +94,10 @@ export const en = {
   'riderStatus.cancelled': 'Order cancelled',
   'riderStatus.expired': 'Order expired',
   'riderStatus.undeliverable': 'Could not be delivered',
+  'error.otpResendTooSoon': 'Wait a moment before asking for another code.',
+  'error.otpRateLimited': 'Too many codes asked for. Try again later.',
+  'error.otpLocked': 'Too many wrong tries on this number. Try again tomorrow, or contact Oregano support.',
+  'error.smsUnavailable': 'We could not send a code right now. Try again in a few minutes.',
   'sms.otp': 'Your Oregano code is {code}. It expires in 5 minutes. Never share it.',
 } as const;
 

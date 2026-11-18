@@ -22,6 +22,8 @@ export function connectRealtime(opts: {
   onHint: (orderId: string) => void;
   onStatus?: (s: RealtimeStatus) => void;
   onAuthFailed?: () => void;
+  /** When given, a 4401 close first renews the session; the socket reconnects only if that worked. */
+  refresh?: () => Promise<boolean>;
   WebSocketImpl?: typeof WebSocket;
 }): { close: () => void } {
   const Impl = opts.WebSocketImpl ?? globalThis.WebSocket;
@@ -85,6 +87,19 @@ export function connectRealtime(opts: {
       if (socket === ws) socket = null;
       if (closed) return;
       setStatus('offline');
+      if (event.code === AUTH_FAILED_CLOSE_CODE && opts.refresh) {
+        // The token expired or the session changed: get a fresh one, then reconnect at once. If the session is
+        // over, the caller signs the user out and the connection is closed from outside.
+        void opts.refresh().then(
+          (renewed) => {
+            if (!closed && renewed) connect();
+          },
+          () => {
+            if (!closed) scheduleReconnect();
+          },
+        );
+        return;
+      }
       if (event.code === AUTH_FAILED_CLOSE_CODE) opts.onAuthFailed?.();
       // The callback may have closed the connection.
       if (!closed) scheduleReconnect();

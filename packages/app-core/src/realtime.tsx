@@ -1,15 +1,17 @@
 import { connectRealtime, type RealtimeStatus } from '@oregano/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { handleAuthFailed, handleOrderHint } from './queries';
+import { handleOrderHint } from './queries';
 import { useApiContext } from './session';
 
 /**
  * Keeps a realtime connection open while signed in and refreshes orders on each hint.
  * Mount it once per app, near the root; it returns the connection status for a banner.
+ * When the server ends the connection because the access token expired, the session is renewed and the
+ * connection reopens with the new token; when the session is over, the user is signed out and it stays closed.
  */
 export function useRealtimeHints(): RealtimeStatus {
-  const { realtimeUrl, token } = useApiContext();
+  const { api, realtimeUrl, token, session } = useApiContext();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<RealtimeStatus>('offline');
 
@@ -20,13 +22,13 @@ export function useRealtimeHints(): RealtimeStatus {
     }
     const connection = connectRealtime({
       url: realtimeUrl,
-      getToken: () => token,
+      getToken: () => session.getAccessToken(),
+      refresh: () => api.refresh(),
       onHint: (orderId) => void handleOrderHint(queryClient, orderId),
-      onAuthFailed: () => void handleAuthFailed(queryClient),
       onStatus: setStatus,
     });
     return () => connection.close();
-  }, [realtimeUrl, token, queryClient]);
+  }, [api, realtimeUrl, token, session, queryClient]);
 
   return status;
 }

@@ -97,5 +97,9 @@ export const bn: Record<MessageKey, string> = {
   'riderStatus.cancelled': 'অর্ডার বাতিল হয়েছে',
   'riderStatus.expired': 'অর্ডারের সময় শেষ',
   'riderStatus.undeliverable': 'পৌঁছে দেওয়া যায়নি',
+  'error.otpResendTooSoon': 'আরেকটি কোড চাওয়ার আগে একটু অপেক্ষা করুন।',
+  'error.otpRateLimited': 'অনেকবার কোড চাওয়া হয়েছে। পরে আবার চেষ্টা করুন।',
+  'error.otpLocked': 'এই নম্বরে অনেকবার ভুল কোড দেওয়া হয়েছে। কাল আবার চেষ্টা করুন, অথবা Oregano সাপোর্টে যোগাযোগ করুন।',
+  'error.smsUnavailable': 'এখন কোড পাঠানো যাচ্ছে না। কয়েক মিনিট পরে আবার চেষ্টা করুন।',
   'sms.otp': 'আপনার Oregano কোড {code}। 5 মিনিটে মেয়াদ শেষ হবে। কাউকে জানাবেন না।',
 };

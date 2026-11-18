@@ -6,6 +6,7 @@ import {
   Order,
   OtpRequestResponse,
   type PlaceOrderBody,
+  RefreshResponse,
   RestaurantDetail,
   RestaurantListResponse,
   RiderOffer,
@@ -27,7 +28,44 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Where the session lives. In browser mode the refresh token is an httpOnly cookie the page cannot read, so
+ * `getRefreshToken` is always null and requests to /v1/auth/ carry credentials. In body mode (native apps)
+ * the client keeps and sends the refresh token itself.
+ */
+export type SessionStore = {
+  mode: 'cookie' | 'body';
+  getAccessToken(): string | null;
+  getRefreshToken(): string | null;
+  save(tokens: { accessToken: string; refreshToken: string | null }): void;
+  clear(): void;
+  /** True when a session probably exists although no access token is held yet (a browser after a reload). */
+  hasSession?(): boolean;
+};
+
+/** A store that keeps tokens in memory only. */
+export function createMemorySessionStore(mode: SessionStore['mode'] = 'body'): SessionStore {
+  let access: string | null = null;
+  let refresh: string | null = null;
+  return {
+    mode,
+    getAccessToken: () => access,
+    getRefreshToken: () => refresh,
+    save: (tokens) => {
+      access = tokens.accessToken;
+      refresh = tokens.refreshToken;
+    },
+    clear: () => {
+      access = null;
+      refresh = null;
+    },
+    hasSession: () => access !== null || refresh !== null,
+  };
+}
+
 export type ApiClient = {
+  /** Trades the refresh token for new tokens. False means the session is over and the user must sign in. */
+  refresh(): Promise<boolean>;
   requestOtp(phone: string): Promise<OtpRequestResponse>;
   verifyOtp(phone: string, code: string): Promise<SessionResponse>;
   logout(): Promise<void>;
@@ -57,6 +95,10 @@ const AdminOrders = z.object({ orders: z.array(AdminOrderRow) });
 
 type Request = { method: 'GET' | 'POST'; path: string; body?: unknown; headers?: Record<string, string> };
 
+type RefreshOutcome = 'ok' | 'signed_out' | 'offline';
+
+const AUTH_PREFIX = '/v1/auth/';
+
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 function timeoutSignal(ms: number): AbortSignal {
@@ -79,7 +121,9 @@ function networkError(error: unknown, signal: AbortSignal): ApiError {
 
 export function createApiClient(opts: {
   baseUrl: string;
-  getToken: () => string | null;
+  session: SessionStore;
+  /** Called once when the session ends: the refresh was refused, so the user must sign in again. */
+  onSignedOut?: () => void;
   fetch?: typeof fetch;
   /** Abort a request (including reading its body) after this long; a weak 3G link must not spin forever. */
   timeoutMs?: number;
@@ -88,10 +132,15 @@ export function createApiClient(opts: {
   const doFetch = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  async function send(req: Request): Promise<{ status: number; requestId: string; json: unknown }> {
+  const { session } = opts;
+
+  async function sendOnce(req: Request): Promise<{ status: number; requestId: string; json: unknown }> {
     const headers: Record<string, string> = { accept: 'application/json', ...req.headers };
-    const token = opts.getToken();
+    const token = session.getAccessToken();
     if (token) headers.authorization = `Bearer ${token}`;
+    // Only the auth routes see the refresh cookie, and they insist on this header as CSRF protection.
+    const browserAuth = session.mode === 'cookie' && req.path.startsWith(AUTH_PREFIX);
+    if (browserAuth) headers['x-oregano-client'] = 'web';
     // Fastify rejects an empty body sent as JSON, so the content type goes only with a body.
     if (req.body !== undefined) headers['content-type'] = 'application/json';
 
@@ -102,6 +151,7 @@ export function createApiClient(opts: {
         method: req.method,
         headers,
         body: req.body === undefined ? undefined : JSON.stringify(req.body),
+        ...(browserAuth ? { credentials: 'include' as const } : {}),
         signal,
       });
     } catch (error) {
@@ -135,6 +185,69 @@ export function createApiClient(opts: {
     return { status: res.status, requestId, json };
   }
 
+  /** In browser mode the page must never hold the refresh token, whatever the server sent. */
+  function saveTokens(accessToken: string, refreshToken: string | null): void {
+    session.save({ accessToken, refreshToken: session.mode === 'cookie' ? null : refreshToken });
+  }
+
+  let refreshing: Promise<RefreshOutcome> | null = null;
+
+  function endSession(): void {
+    session.clear();
+    opts.onSignedOut?.();
+  }
+
+  async function doRefresh(): Promise<RefreshOutcome> {
+    const cookie = session.mode === 'cookie';
+    const refreshToken = session.getRefreshToken();
+    if (!cookie && !refreshToken) {
+      endSession();
+      return 'signed_out';
+    }
+    try {
+      const { json } = await sendOnce({
+        method: 'POST',
+        path: `${AUTH_PREFIX}refresh`,
+        ...(cookie ? {} : { body: { refreshToken } }),
+      });
+      const parsed = RefreshResponse.safeParse(json);
+      if (!parsed.success) return 'offline';
+      saveTokens(parsed.data.accessToken, parsed.data.refreshToken);
+      return 'ok';
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        endSession();
+        return 'signed_out';
+      }
+      // No answer, or a server fault: the session may be fine, so keep it and let the caller try later.
+      return 'offline';
+    }
+  }
+
+  /** One refresh at a time: every request that finds its token expired waits for the same answer. */
+  function refreshOnce(): Promise<RefreshOutcome> {
+    refreshing ??= doRefresh().finally(() => {
+      refreshing = null;
+    });
+    return refreshing;
+  }
+
+  /** Sends the request; if the access token has expired, refreshes once and sends the same request again. */
+  async function send(req: Request): Promise<{ status: number; requestId: string; json: unknown }> {
+    try {
+      return await sendOnce(req);
+    } catch (error) {
+      const hasSession = session.getAccessToken() !== null || session.hasSession?.() === true;
+      if (!(error instanceof ApiError) || error.status !== 401 || req.path.startsWith(AUTH_PREFIX) || !hasSession) {
+        throw error;
+      }
+      const outcome = await refreshOnce();
+      if (outcome === 'signed_out') throw error;
+      if (outcome === 'offline') throw new ApiError(0, 'internal', 'The session could not be renewed', '');
+      return sendOnce(req);
+    }
+  }
+
   async function call<T>(schema: z.ZodType<T>, req: Request): Promise<T> {
     const { status, requestId, json } = await send(req);
     const parsed = schema.safeParse(json);
@@ -149,10 +262,21 @@ export function createApiClient(opts: {
   const id = encodeURIComponent;
 
   return {
+    refresh: async () => (await refreshOnce()) === 'ok',
     requestOtp: (phone) => post(OtpRequestResponse, '/v1/auth/otp/request', { phone }),
-    verifyOtp: (phone, code) => post(SessionResponse, '/v1/auth/otp/verify', { phone, code }),
+    verifyOtp: async (phone, code) => {
+      const result = await post(SessionResponse, '/v1/auth/otp/verify', { phone, code });
+      saveTokens(result.accessToken, result.refreshToken);
+      return result;
+    },
     logout: async () => {
-      await send({ method: 'POST', path: '/v1/auth/logout' });
+      const refreshToken = session.getRefreshToken();
+      try {
+        await send({ method: 'POST', path: '/v1/auth/logout', ...(refreshToken ? { body: { refreshToken } } : {}) });
+      } finally {
+        // Signing out locally must work even offline or with an already expired token.
+        session.clear();
+      }
     },
     me: () => get(Me, '/v1/me'),
     restaurants: (at) =>
