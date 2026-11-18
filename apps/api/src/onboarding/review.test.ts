@@ -416,4 +416,115 @@ describe('application review', () => {
       ).toBe(403);
     });
   });
+
+  describe('review safeguards', () => {
+    it('refuses a ticket for one document on another document\u2019s address', async () => {
+      await submittedRestaurant();
+      const ids = (await t.db.execute<{ id: string }>(sql`SELECT id FROM identity_documents ORDER BY id`)).map(
+        (r) => r.id,
+      );
+      const admin = await t.signIn(ONBOARDING);
+      const ticket = (await call('POST', `/v1/admin/documents/${ids[0]}/link`, admin)).json() as DocumentLink;
+      const res = await t.app().inject({
+        method: 'GET',
+        url: `/v1/admin/documents/${ids[1]}/content`,
+        headers: { ...t.as(admin), 'x-document-ticket': ticket.ticket },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(await audits('document.opened')).toBe(0);
+    });
+
+    it('turns away an upload after a decision, and one that was started before it', async () => {
+      const { token, id } = await submittedRestaurant();
+      const admin = await t.signIn(ONBOARDING);
+      await call('POST', `/v1/admin/applications/restaurant/${id}/approve`, admin, INSIDE);
+      expect((await upload(token, RBASE, 'owner_nid_front')).statusCode).toBe(404);
+      // The race itself: the route's early check passed, then the decision landed before the file was filed.
+      const { requireApplicationOpen } = await import('./restaurant-applications');
+      await expect(t.db.transaction((tx) => requireApplicationOpen(tx, id))).rejects.toMatchObject({
+        code: 'application_not_editable',
+      });
+      const filed = await t.db.execute<{ n: number }>(
+        sql`SELECT count(*)::int AS n FROM identity_documents WHERE status = 'stored' AND review_outcome IS NULL`,
+      );
+      expect(filed[0]?.n).toBe(0);
+    });
+
+    it('does not let the sweep delete files whose application was resubmitted a moment ago', async () => {
+      const { token, id } = await submittedRestaurant();
+      const admin = await t.signIn(ONBOARDING);
+      await call('POST', `/v1/admin/applications/restaurant/${id}/reject`, admin, {
+        reason: 'Please send a clearer photo.',
+      });
+      await t.db.execute(sql`UPDATE identity_documents SET delete_after = now() - interval '1 minute'`);
+      // The sweep has listed them; then the applicant resubmits.
+      const { pruneDocuments, deleteDocumentContent } = await import('../media/vault');
+      const { createS3Store } = await import('../media/store');
+      const deps = { db: t.db, store: createS3Store(t.config.s3), keys: t.config.dataKeys };
+      const sent = await call('POST', `${RBASE}/submit`, token, { noTradeLicence: false });
+      expect(sent.statusCode).toBe(200);
+      const [doc] = await t.db.execute<{ id: string }>(sql`SELECT id FROM identity_documents LIMIT 1`);
+      await deleteDocumentContent(deps, doc?.id as string, 'decision_retention', sql`delete_after <= now()`);
+      expect(await pruneDocuments(deps, new Date(), async () => false)).toBe(0);
+      const left = await t.db.execute<{ n: number }>(
+        sql`SELECT count(*)::int AS n FROM identity_documents WHERE status = 'stored'`,
+      );
+      expect(left[0]?.n).toBe(3);
+    });
+
+    it('does not treat an application waiting on the team as abandoned', async () => {
+      const { id } = await submittedRestaurant();
+      const { restaurantApplicationAbandoned } = await import('./restaurant-applications');
+      const later = new Date(Date.now() + 90 * 86_400_000);
+      expect(await restaurantApplicationAbandoned(t.db, id, later)).toBe(false);
+    });
+
+    it('does not let a team member approve their own application, or one they filed for themselves', async () => {
+      const admin = await t.signIn(ONBOARDING);
+      // Door 1 for the reviewer's own number.
+      const own = await call('POST', '/v1/admin/restaurant-applications', admin, {
+        ...restaurantBody,
+        ownerPhone: ONBOARDING,
+      });
+      expect(own.statusCode).toBe(201);
+      const { id } = own.json() as RestaurantApplicationView;
+      for (const kind of ['owner_nid_front', 'owner_nid_back', 'trade_licence']) await upload(admin, RBASE, kind);
+      await call('POST', `${RBASE}/submit`, admin, { noTradeLicence: false });
+      const res = await call('POST', `/v1/admin/applications/restaurant/${id}/approve`, admin, INSIDE);
+      expect(res.statusCode).toBe(403);
+      // Filed by one reviewer for another person, approved by a different reviewer: fine.
+      const other = await t.signIn(ADMIN);
+      const sameFiler = await call('POST', '/v1/admin/restaurant-applications', admin, {
+        ...restaurantBody,
+        ownerPhone: '01811000050',
+      });
+      const filed = sameFiler.json() as RestaurantApplicationView;
+      const owner = await t.signIn('01811000050');
+      for (const kind of ['owner_nid_front', 'owner_nid_back', 'trade_licence']) await upload(owner, RBASE, kind);
+      await call('POST', `${RBASE}/submit`, owner, { noTradeLicence: false });
+      expect(
+        (await call('POST', `/v1/admin/applications/restaurant/${filed.id}/approve`, admin, INSIDE)).statusCode,
+      ).toBe(403);
+      expect(
+        (await call('POST', `/v1/admin/applications/restaurant/${filed.id}/approve`, other, INSIDE)).statusCode,
+      ).toBe(200);
+    });
+
+    it('starts the deletion clock when a rider is approved or rejected', async () => {
+      const { id } = await submittedRider();
+      const admin = await t.signIn(ONBOARDING);
+      await call('POST', `/v1/admin/applications/rider/${id}/approve`, admin);
+      const rows = await t.db.execute<{ days: number; outcome: string }>(
+        sql`SELECT round(extract(epoch FROM (delete_after - now())) / 86400)::int AS days, review_outcome AS outcome FROM identity_documents`,
+      );
+      expect(rows).toHaveLength(3);
+      for (const r of rows) expect(r).toEqual({ days: 7, outcome: 'accepted' });
+    });
+
+    it('a rider cannot approve themselves', async () => {
+      const { id } = await submittedRider(ONBOARDING);
+      const admin = await t.signIn(ONBOARDING);
+      expect((await call('POST', `/v1/admin/applications/rider/${id}/approve`, admin)).statusCode).toBe(403);
+    });
+  });
 });

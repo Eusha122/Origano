@@ -211,8 +211,8 @@ const slugBase = (name: string): string =>
     .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50) || 'restaurant';
+    .slice(0, 50)
+    .replace(/^-+|-+$/g, '') || 'restaurant';
 
 /**
  * Creates a restaurant that is approved but closed: its owner opens it when ready. The slug comes from the name

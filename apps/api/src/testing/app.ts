@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp } from '../app';
-import { type Limits, loadConfig, type SessionLimits } from '../config';
+import { type Config, type Limits, loadConfig, type SessionLimits } from '../config';
 import type { Db } from '../db/client';
 import { type DemoIds, seedDemo } from '../dev/seed-demo';
 import { RealtimeHub } from '../events/realtime';
@@ -32,6 +32,7 @@ export function withTestApp(
 ): {
   app: () => FastifyInstance;
   db: Db;
+  config: Config;
   /** The sign-in code in the newest queued SMS for a phone. */
   otp: { last(phone: string): Promise<string | undefined>; lastText(phone: string): Promise<string | null> };
   demo: () => DemoIds;
@@ -119,6 +120,7 @@ export function withTestApp(
   return {
     app,
     db,
+    config,
     otp,
     demo: () => {
       if (!ids) throw new Error('Demo data is seeded in beforeEach; use it inside a test');

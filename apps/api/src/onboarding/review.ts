@@ -31,6 +31,16 @@ const notFound = () => new AppError('not_found', 404, 'Not found.');
 const badMove = () => new AppError('invalid_transition', 409, 'That is not possible right now.');
 const incomplete = () => new AppError('application_incomplete', 422, 'Some details or documents are missing.');
 
+const selfReview = () => new AppError('forbidden', 403, 'You cannot review your own application.');
+
+/** Nobody approves an application they made, or one the team member filed for a phone they use themselves. */
+async function refuseOwnApplication(tx: Executor, reviewerId: string, applicantId: string, id: string): Promise<void> {
+  const rows = await tx.execute<{ created_by_user_id: string | null }>(
+    sql`SELECT created_by_user_id FROM restaurant_applications WHERE id = ${id}`,
+  );
+  if (reviewerId === applicantId || rows[0]?.created_by_user_id === reviewerId) throw selfReview();
+}
+
 const accessChanged = (tx: Executor, userId: string) => writeOutbox(tx, 'user.access_changed', { userId });
 
 export type QueueFilter = { kind?: 'restaurant' | 'rider'; status: AccountStatus };
@@ -94,6 +104,7 @@ export async function approveRestaurantApplication(
     if (!row?.applicant_user_id) throw notFound();
     if (row.status === 'approved') return presentApplication(tx, row);
     if (accountTransition(row.status, 'approve') === null) throw badMove();
+    await refuseOwnApplication(tx, reviewerId, row.applicant_user_id, id);
 
     // The licence must be on file, or the reviewer waives it on the record. The two ID photos are always needed.
     const view = await presentApplication(tx, { ...row, no_trade_licence: false });
@@ -178,6 +189,7 @@ export async function approveRiderApplication(
     if (!row) throw notFound();
     if (row.status === 'approved') return { ...(await presentRider(tx, row)), userId };
     if (accountTransition(row.status, 'approve') === null) throw badMove();
+    if (reviewerId === userId) throw selfReview();
     if ((await presentRider(tx, row)).missing.length > 0) throw incomplete();
     await recordDecision(tx, riderSubject(userId), 'accepted', reviewerId, retentionEnd(now));
     await tx.execute(sql`

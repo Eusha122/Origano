@@ -48,10 +48,16 @@ const REFUSALS = {
  * Marks a document deleted (once) and audits it. The object and the key stay on the row until `purgeObject`
  * has removed the object, so a crash in between leaves something `pruneDocuments` can still find.
  */
-async function markDeleted(tx: Executor, id: string, reason: DeletedReason): Promise<boolean> {
+async function markDeleted(
+  tx: Executor,
+  id: string,
+  reason: DeletedReason,
+  /** A condition that must still hold, checked under the row lock: a sweep must not act on stale facts. */
+  stillDue: ReturnType<typeof sql> = sql`TRUE`,
+): Promise<boolean> {
   const done = await tx.execute<{ kind: string }>(sql`
     UPDATE identity_documents SET status = 'deleted', deleted_at = now(), deleted_reason = ${reason}
-    WHERE id = ${id} AND status <> 'deleted' RETURNING kind`);
+    WHERE id = ${id} AND status <> 'deleted' AND ${stillDue} RETURNING kind`);
   const kind = done[0]?.kind;
   if (kind === undefined) return false;
   await writeAudit(tx, {
@@ -87,6 +93,11 @@ export async function storeDocument(
   kind: DocumentKind,
   upload: Buffer,
   uploadedBy: string,
+  /**
+   * Runs first in the transaction that makes the file visible. The caller locks its own record there and refuses
+   * (by throwing) when the subject can no longer take files, so an upload cannot land beside a decision.
+   */
+  guard?: (tx: Executor) => Promise<void>,
 ): Promise<DocumentSummary> {
   const checked = await normaliseDocumentImage(upload);
   if (!checked.ok) throw REFUSALS[checked.code];
@@ -109,32 +120,40 @@ export async function storeDocument(
   }
 
   const replaced: string[] = [];
-  const summary = await deps.db.transaction(async (tx) => {
-    // Two uploads of one kind at once take turns; the older document goes first: only one stored row per kind may exist.
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`doc:${subject.type}:${subject.id}:${kind}`}))`);
-    const old = await tx.execute<{ id: string }>(sql`
+  const summary = await deps.db
+    .transaction(async (tx) => {
+      if (guard) await guard(tx);
+      // Two uploads of one kind at once take turns; the older document goes first: only one stored row per kind may exist.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`doc:${subject.type}:${subject.id}:${kind}`}))`);
+      const old = await tx.execute<{ id: string }>(sql`
       SELECT id FROM identity_documents
       WHERE subject_type = ${subject.type} AND subject_id = ${subject.id} AND kind = ${kind}
         AND status = 'stored' AND id <> ${id} FOR UPDATE`);
-    for (const row of old) {
-      await markDeleted(tx, row.id, 'replaced');
-      replaced.push(row.id);
-    }
-    const rows = await tx.execute<Row>(sql`
+      for (const row of old) {
+        await markDeleted(tx, row.id, 'replaced');
+        replaced.push(row.id);
+      }
+      const rows = await tx.execute<Row>(sql`
       UPDATE identity_documents SET status = 'stored', sealed_key = ${JSON.stringify(sealed)}::jsonb,
         byte_size = ${body.length}
       WHERE id = ${id} AND status = 'pending' RETURNING id, kind, status, uploaded_at, review_outcome`);
-    // A sweep may have given up on a very slow upload. Its object is purged later through the deleted row.
-    if (!rows[0]) throw new AppError('bad_request', 409, 'The upload took too long. Try again.');
-    await writeAudit(tx, {
-      actor: { type: 'user', id: uploadedBy },
-      action: 'document.uploaded',
-      targetType: 'document',
-      targetId: id,
-      data: { kind, subjectType: subject.type },
+      // A sweep may have given up on a very slow upload. Its object is purged later through the deleted row.
+      if (!rows[0]) throw new AppError('bad_request', 409, 'The upload took too long. Try again.');
+      await writeAudit(tx, {
+        actor: { type: 'user', id: uploadedBy },
+        action: 'document.uploaded',
+        targetType: 'document',
+        targetId: id,
+        data: { kind, subjectType: subject.type },
+      });
+      return summarise(rows[0]);
+    })
+    .catch(async (error: unknown) => {
+      // The object is written but will never be shown: remove it now rather than leave it for the hourly sweep.
+      await deps.db.transaction((tx) => markDeleted(tx, id, 'upload_failed')).catch(() => {});
+      await purgeObject(deps, id).catch(() => {});
+      throw error;
     });
-    return summarise(rows[0]);
-  });
 
   for (const oldId of replaced) await purgeObject(deps, oldId);
   return summary;
@@ -189,8 +208,13 @@ export async function recordDecision(
 }
 
 /** Deletes the file and its key; the kind, reviewer, time and outcome stay. Safe to repeat. */
-export async function deleteDocumentContent(deps: VaultDeps, documentId: string, reason: DeletedReason): Promise<void> {
-  await deps.db.transaction((tx) => markDeleted(tx, documentId, reason));
+export async function deleteDocumentContent(
+  deps: VaultDeps,
+  documentId: string,
+  reason: DeletedReason,
+  stillDue?: ReturnType<typeof sql>,
+): Promise<void> {
+  await deps.db.transaction((tx) => markDeleted(tx, documentId, reason, stillDue));
   await purgeObject(deps, documentId);
 }
 
@@ -235,8 +259,28 @@ export async function pruneDocuments(
   let done = 0;
   for (const [id, reason] of work) {
     try {
-      if (reason) await deleteDocumentContent(deps, id, reason);
-      else await purgeObject(deps, id);
+      if (reason === 'decision_retention') {
+        // A resubmission may have cleared the date since the list was made.
+        await deleteDocumentContent(deps, id, reason, sql`delete_after <= ${at}`);
+      } else if (reason === 'upload_failed') {
+        await deleteDocumentContent(
+          deps,
+          id,
+          reason,
+          sql`status = 'pending' AND uploaded_at <= ${at}::timestamptz - interval '1 hour'`,
+        );
+      } else if (reason === 'abandoned') {
+        const rows = await deps.db.execute<{ subject_type: DocumentSubject['type']; subject_id: string }>(
+          sql`SELECT subject_type, subject_id FROM identity_documents WHERE id = ${id}`,
+        );
+        const subject = rows[0];
+        // Asked again just before deleting: the applicant may have come back since the first answer.
+        if (subject && (await isAbandoned({ type: subject.subject_type, id: subject.subject_id }))) {
+          await deleteDocumentContent(deps, id, reason);
+        } else continue;
+      } else {
+        await purgeObject(deps, id);
+      }
       done += 1;
     } catch (error) {
       // Left for the next pass; the others must not wait behind it.

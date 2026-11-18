@@ -94,6 +94,16 @@ export async function editableApplicationId(db: Executor, userId: string): Promi
   return row.id;
 }
 
+/** Locks the application and refuses unless it is still the applicant's to change. Approve and submit take the same lock. */
+export async function requireApplicationOpen(tx: Executor, applicationId: string): Promise<void> {
+  const rows = await tx.execute<{ status: AccountStatus }>(
+    sql`SELECT status FROM restaurant_applications WHERE id = ${applicationId} FOR UPDATE`,
+  );
+  const status = rows[0]?.status;
+  if (!status) throw notFound();
+  if (status !== 'applied' && status !== 'rejected') throw notEditable();
+}
+
 export async function touchApplication(db: Executor, applicationId: string): Promise<void> {
   await db.execute(sql`UPDATE restaurant_applications SET last_activity_at = now() WHERE id = ${applicationId}`);
 }
@@ -186,10 +196,10 @@ export async function submitMyApplication(
   });
 }
 
-/** True when the application was never approved and has been idle for 30 days. The vault asks this before keeping files. */
+/** True when the applicant has left it idle for 30 days (applied or rejected; one waiting on the team is never abandoned). The vault asks this before keeping files. */
 export async function restaurantApplicationAbandoned(db: Executor, id: string, now = new Date()): Promise<boolean> {
   const rows = await db.execute<{ abandoned: boolean }>(sql`
-    SELECT (status <> 'approved'
+    SELECT (status IN ('applied', 'rejected')
       AND last_activity_at <= ${now.toISOString()}::timestamptz - make_interval(days => ${ABANDONED_AFTER_DAYS})) AS abandoned
     FROM restaurant_applications WHERE id = ${id}`);
   // An application that no longer exists has nobody to keep its files for.
@@ -200,7 +210,7 @@ export async function restaurantApplicationAbandoned(db: Executor, id: string, n
 export async function pruneRestaurantApplicationDetails(db: Db, now: Date): Promise<number> {
   const rows = await db.execute<{ id: string }>(sql`
     UPDATE restaurant_applications SET payout_account_sealed = NULL, payout_account_last4 = ''
-    WHERE status <> 'approved' AND payout_account_sealed IS NOT NULL
+    WHERE status IN ('applied', 'rejected') AND payout_account_sealed IS NOT NULL
       AND last_activity_at <= ${now.toISOString()}::timestamptz - make_interval(days => ${ABANDONED_AFTER_DAYS})
     RETURNING id`);
   return rows.length;

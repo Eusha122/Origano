@@ -113,6 +113,16 @@ export async function editableRiderId(db: Executor, userId: string): Promise<str
   return row.user_id;
 }
 
+/** The rider's version of requireApplicationOpen. */
+export async function requireRiderOpen(tx: Executor, userId: string): Promise<void> {
+  const rows = await tx.execute<{ status: AccountStatus }>(
+    sql`SELECT status FROM riders WHERE user_id = ${userId} FOR UPDATE`,
+  );
+  const status = rows[0]?.status;
+  if (!status) throw notFound();
+  if (status !== 'applied' && status !== 'rejected') throw notEditable();
+}
+
 export async function touchRider(db: Executor, userId: string): Promise<void> {
   await db.execute(sql`UPDATE riders SET last_activity_at = now() WHERE user_id = ${userId}`);
 }
@@ -215,7 +225,8 @@ export async function submitMyRiderApplication(db: Db, userId: string): Promise<
   });
 }
 
-const OPEN_STATUSES = sql`status IN ('applied', 'under_review', 'rejected')`;
+/** Waiting on the applicant. An application under review is waiting on the team and never expires. */
+const OPEN_STATUSES = sql`status IN ('applied', 'rejected')`;
 
 /** True when the application is still open (never approved) and has been idle for 30 days. */
 export async function riderApplicationAbandoned(db: Executor, userId: string, now = new Date()): Promise<boolean> {

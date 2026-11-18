@@ -15,6 +15,7 @@ import {
   editableApplicationId,
   getMyApplication,
   RESTAURANT_DOCUMENT_KINDS,
+  requireApplicationOpen,
   saveMyApplication,
   submitMyApplication,
   touchApplication,
@@ -23,6 +24,7 @@ import {
   editableRiderId,
   getMyRiderApplication,
   RIDER_DOCUMENT_KINDS,
+  requireRiderOpen,
   riderSubject,
   saveMyRiderApplication,
   submitMyRiderApplication,
@@ -68,6 +70,7 @@ export function onboardingRoutes(app: FastifyInstance, config: Config, { db, sto
       kind.data,
       bytes,
       user.id,
+      (tx) => requireApplicationOpen(tx, applicationId),
     );
     await touchApplication(db, applicationId);
     reply.code(201);
@@ -105,7 +108,9 @@ export function onboardingRoutes(app: FastifyInstance, config: Config, { db, sto
     const file = await request.file();
     if (!file) throw invalid();
     const bytes = await file.toBuffer();
-    const stored = await storeDocument({ db, store, keys }, riderSubject(riderId), kind.data, bytes, user.id);
+    const stored = await storeDocument({ db, store, keys }, riderSubject(riderId), kind.data, bytes, user.id, (tx) =>
+      requireRiderOpen(tx, riderId),
+    );
     await touchRider(db, riderId);
     reply.code(201);
     return { id: stored.id, kind: stored.kind, uploadedAt: stored.uploadedAt, outcome: stored.outcome };
