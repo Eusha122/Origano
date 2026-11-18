@@ -7,6 +7,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
 import { documentRoutes } from './admin/document-routes';
 import { adminRoutes } from './admin/routes';
+import { discountRoutes } from './catalog/discount-routes';
+import { hoursRoutes } from './catalog/hours-routes';
 import { menuRoutes } from './catalog/menu-routes';
 import { catalogRoutes } from './catalog/routes';
 import { catalogStaffRoutes } from './catalog/staff-routes';
@@ -189,6 +191,8 @@ export async function buildApp(deps: {
         catalogRoutes(v1, services);
         catalogStaffRoutes(v1, services);
         menuRoutes(v1, services);
+        hoursRoutes(v1, services);
+        discountRoutes(v1, services);
         orderRoutes(v1, config, services);
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);

@@ -105,3 +105,57 @@ export const OptionsBody = z.object({
     .max(6),
 });
 export type OptionsBody = z.infer<typeof OptionsBody>;
+
+const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+export const HoursInterval = z.object({ day: z.number().int().min(0).max(6), open: clock, close: clock });
+export type HoursInterval = z.infer<typeof HoursInterval>;
+
+/** Weekly opening hours in zone time. A close at or before the open means the next day (up to 04:00). */
+export const HoursBody = z.object({ intervals: z.array(HoursInterval).max(21) });
+export type HoursBody = z.infer<typeof HoursBody>;
+
+export const PrepBody = z.object({ prepMinutes: z.number().int().min(5).max(120) });
+export type PrepBody = z.infer<typeof PrepBody>;
+
+export const DiscountBody = z
+  .object({
+    kind: z.enum(['percent', 'amount']),
+    /** A whole percent (1 to 90) for `percent`; poisha for `amount`. */
+    value: z.number().int().min(1).max(MAX_ITEM_PRICE_POISHA),
+    scope: z.enum(['item', 'category', 'menu']),
+    menuItemId: z.uuid().optional(),
+    categoryId: z.uuid().optional(),
+    startsAt: z.iso.datetime(),
+    endsAt: z.iso.datetime(),
+  })
+  .refine((d) => d.kind !== 'percent' || d.value <= 90, { error: 'Percent is 1 to 90' })
+  .refine(
+    (d) =>
+      (d.scope === 'item' && d.menuItemId !== undefined && d.categoryId === undefined) ||
+      (d.scope === 'category' && d.categoryId !== undefined && d.menuItemId === undefined) ||
+      (d.scope === 'menu' && d.menuItemId === undefined && d.categoryId === undefined),
+    { error: 'The target does not match the scope' },
+  )
+  .refine((d) => new Date(d.endsAt).getTime() > new Date(d.startsAt).getTime(), {
+    error: 'It must end after it starts',
+  });
+export type DiscountBody = z.infer<typeof DiscountBody>;
+
+export const DiscountPatch = z
+  .object({ isActive: z.boolean().optional(), endsAt: z.iso.datetime().optional() })
+  .refine((v) => v.isActive !== undefined || v.endsAt !== undefined, { error: 'Nothing to change' });
+export type DiscountPatch = z.infer<typeof DiscountPatch>;
+
+export const Discount = z.object({
+  id: z.uuid(),
+  kind: z.enum(['percent', 'amount']),
+  value: z.number().int(),
+  scope: z.enum(['item', 'category', 'menu']),
+  menuItemId: z.uuid().nullable(),
+  categoryId: z.uuid().nullable(),
+  startsAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+  isActive: z.boolean(),
+});
+export type Discount = z.infer<typeof Discount>;
