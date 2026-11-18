@@ -43,13 +43,30 @@ export function requireUser(request: FastifyRequest): AuthUser {
   return request.user;
 }
 
-export function requireRole(request: FastifyRequest, role: 'restaurant' | 'rider'): AuthUser {
+export function requireRole(request: FastifyRequest, role: 'restaurant'): AuthUser {
   const user = requireUser(request);
-  const allowed =
-    role === 'restaurant'
-      ? user.restaurantIds.length > 0
-      : user.rider?.status === 'approved' && user.rider.agencyActive;
-  if (!allowed) throw new AppError('forbidden', 403, 'You cannot do that.');
+  if (role === 'restaurant' && user.restaurantIds.length === 0) {
+    throw new AppError('forbidden', 403, 'You cannot do that.');
+  }
+  return user;
+}
+
+/** A rider who may take work now: approved, and not blocked by a suspended agency. */
+export function riderCanWork(rider: AuthUser['rider']): boolean {
+  return rider !== null && rider.status === 'approved' && (rider.type !== 'agency' || rider.agencyActive);
+}
+
+/** For going online, offers, claiming and picking up: a rider who may work. */
+export function requireWorkingRider(request: FastifyRequest): AuthUser {
+  const user = requireUser(request);
+  if (!riderCanWork(user.rider)) throw new AppError('forbidden', 403, 'You cannot do that.');
+  return user;
+}
+
+/** For finishing what a rider already carries: any rider record, even a suspended one. The holder check still applies. */
+export function requireRiderAccount(request: FastifyRequest): AuthUser {
+  const user = requireUser(request);
+  if (!user.rider) throw new AppError('forbidden', 403, 'You cannot do that.');
   return user;
 }
 
@@ -63,7 +80,7 @@ export function requirePermission(request: FastifyRequest, permission: Permissio
 export function toMe(user: AuthUser): Me {
   const roles: Role[] = ['customer'];
   if (user.restaurantIds.length > 0) roles.push('restaurant');
-  if (user.rider?.status === 'approved') roles.push('rider');
+  if (riderCanWork(user.rider)) roles.push('rider');
   if (user.teamRoles.length > 0) roles.push('admin');
   return {
     id: user.id,

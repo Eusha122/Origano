@@ -1,6 +1,6 @@
 import type { RiderOffer } from '@oregano/contracts';
 import { sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import type { Db, Tx } from '../db/client';
 import { writeOrderChanged } from '../events/outbox';
 
 export type ClaimResult = 'claimed' | 'already_mine' | 'taken' | 'not_claimable';
@@ -74,4 +74,35 @@ export async function listOffers(db: Db, zoneId: string): Promise<RiderOffer[]> 
     distanceKm: Math.round(Number(r.distance_m) / 100) / 10,
     deliveryFee: r.delivery_fee_poisha,
   }));
+}
+
+/**
+ * Puts every order this rider holds but has not picked up (preparing or ready) back in the offer pool.
+ * Orders already on the road stay with the rider, who can still deliver them. Returns the released order ids.
+ */
+export async function releaseRiderOrders(tx: Tx, riderId: string): Promise<string[]> {
+  const released = await tx.execute<{
+    id: string;
+    customer_id: string;
+    restaurant_id: string;
+    zone_id: string;
+    status: 'preparing' | 'ready';
+  }>(sql`
+    UPDATE orders SET rider_id = NULL, updated_at = now()
+    WHERE rider_id = ${riderId} AND status IN ('preparing', 'ready')
+    RETURNING id, customer_id, restaurant_id, zone_id, status`);
+  for (const row of released) {
+    await tx.execute(sql`
+      INSERT INTO order_events (order_id, event, from_status, to_status, actor_type, actor_id)
+      VALUES (${row.id}, 'rider_released', ${row.status}, ${row.status}, 'system', ${riderId})`);
+    await writeOrderChanged(tx, {
+      orderId: row.id,
+      customerId: row.customer_id,
+      restaurantId: row.restaurant_id,
+      riderId: null,
+      zoneId: row.zone_id,
+      status: row.status,
+    });
+  }
+  return released.map((r) => r.id);
 }

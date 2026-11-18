@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import type { WebSocket } from 'ws';
 import { z } from 'zod';
+import { riderCanWork } from '../identity/auth';
 import type { AuthUser, authenticateAccess } from '../identity/sessions';
 import type { OrderChangedPayload } from './outbox';
 import { EVENTS_CHANNEL } from './relay';
@@ -33,7 +34,7 @@ export function audienceIncludes(user: AuthUser, event: OrderChangedPayload): bo
   if (user.restaurantIds.includes(event.restaurantId)) return true;
   if (event.riderId !== null) return user.id === event.riderId;
   const offerable = event.status === 'preparing' || event.status === 'ready';
-  return offerable && user.rider?.status === 'approved' && user.rider.zoneId === event.zoneId;
+  return offerable && riderCanWork(user.rider) && user.rider?.zoneId === event.zoneId;
 }
 
 type Connection = { socket: WebSocket; user: AuthUser; sessionId: string; expiryTimer: NodeJS.Timeout };

@@ -2,6 +2,8 @@ import {
   AdminCreateRestaurantApplicationBody,
   type AdminOrderRow,
   ApproveRestaurantBody,
+  CreateAgencyBody,
+  ReasonBody,
   RejectApplicationBody,
 } from '@oregano/contracts';
 import { ACCOUNT_STATUSES, type AccountStatus, type OrderStatus } from '@oregano/domain';
@@ -12,6 +14,16 @@ import type { Config } from '../config';
 import { AppError } from '../errors';
 import { requirePermission } from '../identity/auth';
 import { listTeam } from '../identity/team';
+import {
+  createAgency,
+  listAgencies,
+  reinstateAgency,
+  reinstateRestaurant,
+  reinstateRider,
+  suspendAgency,
+  suspendRestaurant,
+  suspendRider,
+} from '../onboarding/accounts';
 import {
   approveRestaurantApplication,
   approveRiderApplication,
@@ -130,5 +142,52 @@ export function adminRoutes(app: FastifyInstance, config: Config, { db, clock }:
     const view = await createApplicationForOwner({ db, keys: config.dataKeys }, admin.id, body.data);
     reply.code(201);
     return view;
+  });
+
+  // Suspending and reinstating. A repeat is answered with 200 and writes nothing.
+  const reason = (body: unknown): string => {
+    const parsed = ReasonBody.safeParse(body);
+    if (!parsed.success) throw invalid();
+    return parsed.data.reason;
+  };
+
+  app.post<{ Params: { userId: string } }>('/admin/riders/:userId/suspend', async (request) => {
+    const admin = requirePermission(request, 'accounts.manage');
+    return suspendRider(db, admin.id, uuid(request.params.userId), reason(request.body));
+  });
+  app.post<{ Params: { userId: string } }>('/admin/riders/:userId/reinstate', async (request) => {
+    const admin = requirePermission(request, 'accounts.manage');
+    return reinstateRider(db, admin.id, uuid(request.params.userId));
+  });
+  app.post<{ Params: { id: string } }>('/admin/restaurants/:id/suspend', async (request) => {
+    const admin = requirePermission(request, 'accounts.manage');
+    reason(request.body);
+    return suspendRestaurant(db, admin.id, uuid(request.params.id));
+  });
+  app.post<{ Params: { id: string } }>('/admin/restaurants/:id/reinstate', async (request) => {
+    const admin = requirePermission(request, 'accounts.manage');
+    return reinstateRestaurant(db, admin.id, uuid(request.params.id));
+  });
+  app.post<{ Params: { id: string } }>('/admin/agencies/:id/suspend', async (request) => {
+    const admin = requirePermission(request, 'accounts.manage');
+    reason(request.body);
+    return suspendAgency(db, admin.id, uuid(request.params.id));
+  });
+  app.post<{ Params: { id: string } }>('/admin/agencies/:id/reinstate', async (request) => {
+    const admin = requirePermission(request, 'accounts.manage');
+    return reinstateAgency(db, admin.id, uuid(request.params.id));
+  });
+
+  app.get('/admin/agencies', async (request) => {
+    requirePermission(request, 'accounts.manage');
+    return { agencies: await listAgencies(db) };
+  });
+  app.post('/admin/agencies', async (request, reply) => {
+    const admin = requirePermission(request, 'accounts.manage');
+    const body = CreateAgencyBody.safeParse(request.body);
+    if (!body.success) throw invalid();
+    const agency = await createAgency(db, admin.id, body.data);
+    reply.code(201);
+    return agency;
   });
 }
