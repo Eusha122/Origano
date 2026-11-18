@@ -61,7 +61,8 @@ export async function placeOrderIn(
   await assertUnderOpenOrderLimit(tx, customer.id, openOrderLimit);
   const restaurant = await getRestaurantForOrder(tx, body.restaurantId);
   if (!restaurant) throw new AppError('not_found', 404, 'Not found.');
-  if (!restaurant.isOpen) throw new AppError('restaurant_closed', 422, 'This restaurant is closed right now.');
+  if (!restaurant.approved || !restaurant.isOpen)
+    throw new AppError('restaurant_closed', 422, 'This restaurant is closed right now.');
 
   const found = new Map(
     (

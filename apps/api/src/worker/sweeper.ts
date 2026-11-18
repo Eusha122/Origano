@@ -1,6 +1,7 @@
 import type { Db } from '../db/client';
 import { pruneOtp, pruneSessions } from '../identity/retention';
 import { pruneSms } from '../notifications/sms/retention';
+import { pruneRestaurantApplicationDetails } from '../onboarding/restaurant-applications';
 
 /** One pass over one kind of old data. `run` returns how many rows it changed, and must be safe to repeat. */
 export type SweepJob = { name: string; run(db: Db, now: Date): Promise<number> };
@@ -11,6 +12,7 @@ export function defaultSweepJobs(): SweepJob[] {
     { name: 'otp', run: pruneOtp },
     { name: 'sessions', run: pruneSessions },
     { name: 'sms', run: pruneSms },
+    { name: 'restaurantApplications', run: pruneRestaurantApplicationDetails },
   ];
 }
 

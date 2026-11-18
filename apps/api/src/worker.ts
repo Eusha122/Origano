@@ -1,11 +1,17 @@
 import { type Config, ConfigError, loadConfig } from './config';
-import { createDb } from './db/client';
+import { createDb, type Db } from './db/client';
 import { startRelay } from './events/relay';
 import { openStore } from './media/store';
-import { pruneDocuments } from './media/vault';
+import { type DocumentSubject, pruneDocuments } from './media/vault';
 import { createProviders } from './notifications/sms/providers';
 import { startSmsDispatcher } from './notifications/sms/queue';
+import { restaurantApplicationAbandoned } from './onboarding/restaurant-applications';
 import { defaultSweepJobs, startSweeper } from './worker/sweeper';
+
+/** Each kind of subject says for itself when its files are no longer wanted. Rider applications join in Task 13. */
+async function isAbandoned(db: Db, subject: DocumentSubject): Promise<boolean> {
+  return subject.type === 'restaurant_application' ? restaurantApplicationAbandoned(db, subject.id) : false;
+}
 
 async function main(): Promise<void> {
   let config: Config;
@@ -28,10 +34,10 @@ async function main(): Promise<void> {
     log: { warn: (message) => console.warn(message) },
   });
   const store = await openStore(config);
-  // Task 12 replaces the always-false predicate with onboarding's "is this application abandoned".
   const documents = {
     name: 'documents',
-    run: (_db: typeof db, now: Date) => pruneDocuments({ db, store, keys: config.dataKeys }, now, async () => false),
+    run: (_db: typeof db, now: Date) =>
+      pruneDocuments({ db, store, keys: config.dataKeys }, now, (subject) => isAbandoned(db, subject)),
   };
   const sweeper = startSweeper(db, [...defaultSweepJobs(), documents]);
   console.log('worker started: relaying outbox to redis, sending SMS, sweeping old data');

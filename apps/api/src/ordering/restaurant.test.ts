@@ -105,9 +105,9 @@ describe('the restaurant side of an order', () => {
     const placed = await place();
     await t.signIn(OTHER_OWNER);
     const other = await t.db.execute<{ id: string }>(sql`
-      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location)
+      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, status)
       VALUES (${t.demo().zoneId}, 'other-place', 'Other', 'অন্য', 'Cafe', 'ক্যাফে', 'Main Road',
-        ST_SetSRID(ST_MakePoint(88.28, 24.6), 4326)::geography)
+        ST_SetSRID(ST_MakePoint(88.28, 24.6), 4326)::geography, 'approved')
       RETURNING id`);
     await t.db.execute(sql`
       INSERT INTO restaurant_staff (restaurant_id, user_id, role)

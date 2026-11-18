@@ -48,9 +48,9 @@ describe('restaurants and menus', () => {
   it('lists open restaurants before closed ones, each by name', async () => {
     await t.db.execute(sql`UPDATE restaurants SET is_open = false WHERE slug = 'burger-lane'`);
     await t.db.execute(sql`
-      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, is_open)
+      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, is_open, status)
       SELECT zone_id, 'zed-cafe', 'Zed Cafe', 'জেড ক্যাফে', 'Cafe', 'ক্যাফে', 'Main Road',
-        ST_GeogFromText('SRID=4326;POINT(88.2780 24.5970)'), true FROM restaurants WHERE slug = 'burger-lane'`);
+        ST_GeogFromText('SRID=4326;POINT(88.2780 24.5970)'), true, 'approved' FROM restaurants WHERE slug = 'burger-lane'`);
     try {
       const res = await get('/v1/restaurants');
       expect(res.json().restaurants.map((r: { slug: string }) => r.slug)).toEqual(['zed-cafe', 'burger-lane']);

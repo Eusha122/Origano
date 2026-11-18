@@ -109,13 +109,13 @@ export async function seedDemo(db: Db): Promise<DemoIds> {
 
   const restaurant = await one(
     db.execute<{ id: string }>(sql`
-      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, is_open, prep_minutes)
+      INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, is_open, prep_minutes, status)
       VALUES (${zoneId}, 'burger-lane', 'Burger Lane', 'বার্গার লেন', 'Burgers, pizza', 'বার্গার, পিৎজা',
-        'Court Road, Chapainawabganj', ST_GeogFromText('SRID=4326;POINT(88.2710 24.5960)'), true, 20)
+        'Court Road, Chapainawabganj', ST_GeogFromText('SRID=4326;POINT(88.2710 24.5960)'), true, 20, 'approved')
       ON CONFLICT (slug) DO UPDATE SET zone_id = EXCLUDED.zone_id, name_en = EXCLUDED.name_en,
         name_bn = EXCLUDED.name_bn, cuisine_en = EXCLUDED.cuisine_en, cuisine_bn = EXCLUDED.cuisine_bn,
         address_line = EXCLUDED.address_line, location = EXCLUDED.location, is_open = EXCLUDED.is_open,
-        prep_minutes = EXCLUDED.prep_minutes
+        prep_minutes = EXCLUDED.prep_minutes, status = EXCLUDED.status
       RETURNING id`),
   );
   const restaurantId = restaurant.id;

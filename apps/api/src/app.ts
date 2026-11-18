@@ -20,6 +20,7 @@ import { authenticateAccess } from './identity/sessions';
 import { MAX_DOCUMENT_BYTES } from './media/image';
 import type { ObjectStore } from './media/store';
 import type { SmsDeps } from './notifications/sms/queue';
+import { onboardingRoutes } from './onboarding/routes';
 import { restaurantRoutes } from './ordering/restaurant-routes';
 import { orderRoutes } from './ordering/routes';
 import { hashIp, subkey } from './security/crypto';
@@ -146,6 +147,7 @@ export async function buildApp(deps: {
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);
         adminRoutes(v1, services);
+        onboardingRoutes(v1, config, services);
         if (config.devOtpPeek) devRoutes(v1, services);
       },
       { prefix: '/v1' },

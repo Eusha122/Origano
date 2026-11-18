@@ -94,7 +94,7 @@ describe('retention sweeper', () => {
 
   it('the default jobs run together without error on an empty database', async () => {
     const result = await runSweepOnce(db, defaultSweepJobs(), NOW);
-    expect(Object.keys(result).sort()).toEqual(['otp', 'sessions', 'sms']);
-    expect(Object.values(result)).toEqual([0, 0, 0]);
+    expect(Object.keys(result).sort()).toEqual(['otp', 'restaurantApplications', 'sessions', 'sms']);
+    expect(Object.values(result).every((n) => n === 0)).toBe(true);
   });
 });

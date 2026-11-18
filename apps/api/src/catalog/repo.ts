@@ -62,7 +62,7 @@ export async function listRestaurants(db: Db, opts: { zoneId?: string; point?: P
     SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
       r.is_open, r.prep_minutes, r.zone_id, ${distanceColumn(opts.point)} AS distance_m
     FROM restaurants r JOIN zones z ON z.id = r.zone_id
-    WHERE ${zoneFilter}
+    WHERE ${zoneFilter} AND r.status = 'approved'
     ORDER BY r.is_open DESC, r.name_en ASC`);
   return rows.map(toRestaurantRow);
 }
@@ -71,7 +71,7 @@ export async function findRestaurantBySlug(db: Db, slug: string, point?: Point):
   const rows = await db.execute<RestaurantDbRow>(sql`
     SELECT r.id, r.slug, r.name_en, r.name_bn, r.cuisine_en, r.cuisine_bn, r.address_line,
       r.is_open, r.prep_minutes, r.zone_id, ${distanceColumn(point)} AS distance_m
-    FROM restaurants r WHERE r.slug = ${slug}`);
+    FROM restaurants r WHERE r.slug = ${slug} AND r.status = 'approved'`);
   const row = rows[0];
   return row ? toRestaurantRow(row) : null;
 }
@@ -129,6 +129,8 @@ export type RestaurantForOrder = {
   id: string;
   zoneId: string;
   isOpen: boolean;
+  /** Only an approved restaurant can take orders. */
+  approved: boolean;
   nameEn: string;
   nameBn: string;
   location: { lat: number; lng: number };
@@ -139,12 +141,13 @@ export async function getRestaurantForOrder(db: Executor, id: string): Promise<R
     id: string;
     zone_id: string;
     is_open: boolean;
+    status: string;
     name_en: string;
     name_bn: string;
     lat: number;
     lng: number;
   }>(sql`
-    SELECT id, zone_id, is_open, name_en, name_bn,
+    SELECT id, zone_id, is_open, status, name_en, name_bn,
       ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
     FROM restaurants WHERE id = ${id}`);
   const r = rows[0];
@@ -153,6 +156,7 @@ export async function getRestaurantForOrder(db: Executor, id: string): Promise<R
     id: r.id,
     zoneId: r.zone_id,
     isOpen: r.is_open,
+    approved: r.status === 'approved',
     nameEn: r.name_en,
     nameBn: r.name_bn,
     location: { lat: Number(r.lat), lng: Number(r.lng) },

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { DOCUMENT_KINDS, type DocumentKind } from '@oregano/contracts';
 import { sql } from 'drizzle-orm';
 import { writeAudit } from '../admin/audit';
 import type { Config } from '../config';
@@ -8,15 +9,7 @@ import { decryptBytes, encryptBytes, newDataKey, type SealedKey, unwrapDataKey }
 import { normaliseDocumentImage } from './image';
 import type { ObjectStore } from './store';
 
-export const DOCUMENT_KINDS = [
-  'nid_front',
-  'nid_back',
-  'photo',
-  'trade_licence',
-  'owner_nid_front',
-  'owner_nid_back',
-] as const;
-export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+export { DOCUMENT_KINDS, type DocumentKind };
 export type DocumentSubject = { type: 'rider' | 'restaurant_application'; id: string };
 export type DeletedReason = 'decision_retention' | 'abandoned' | 'replaced' | 'upload_failed';
 export type VaultDeps = { db: Db; store: ObjectStore; keys: Config['dataKeys'] };
