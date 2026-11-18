@@ -63,6 +63,9 @@ export type Limits = {
   readonly wsUpgradesPerIpMinute: number;
   readonly wsConnectionsPerIp: number;
   readonly uploadsPerUserHour: number;
+  readonly catalogWritesPerUserHour: number;
+  readonly publicUploadsPerUserHour: number;
+  readonly searchPerIpMinute: number;
   readonly staffPerRestaurant: number;
 };
 
@@ -87,6 +90,9 @@ const STANDARD_LIMITS: Limits = {
   wsUpgradesPerIpMinute: 30,
   wsConnectionsPerIp: 20,
   uploadsPerUserHour: 30,
+  catalogWritesPerUserHour: 600,
+  publicUploadsPerUserHour: 60,
+  searchPerIpMinute: 60,
   staffPerRestaurant: 20,
 };
 

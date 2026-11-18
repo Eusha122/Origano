@@ -8,6 +8,7 @@ import type { Redis } from 'ioredis';
 import { documentRoutes } from './admin/document-routes';
 import { adminRoutes } from './admin/routes';
 import { catalogRoutes } from './catalog/routes';
+import { catalogStaffRoutes } from './catalog/staff-routes';
 import type { Config } from './config';
 import type { Db } from './db/client';
 import { dispatchRoutes } from './dispatch/routes';
@@ -185,6 +186,7 @@ export async function buildApp(deps: {
       async (v1) => {
         identityRoutes(v1, config, services);
         catalogRoutes(v1, services);
+        catalogStaffRoutes(v1, services);
         orderRoutes(v1, config, services);
         restaurantRoutes(v1, services);
         dispatchRoutes(v1, services);
