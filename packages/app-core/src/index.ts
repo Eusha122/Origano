@@ -8,7 +8,9 @@ export {
 } from '@oregano/api-client';
 // Apps import React Query from here so there is exactly one copy, the one ApiProvider uses.
 export { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+export { buildDiscountBody, type DiscountForm, discountStatus } from './discount-form';
 export { errorMessageKey } from './errors';
+export { copyDayToAll, type HoursRow, hasNextDay, validateHours } from './hours-form';
 export {
   buildOptionsBody,
   groupsFromItem,

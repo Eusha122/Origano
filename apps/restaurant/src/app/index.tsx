@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ApplyScreen } from '../apply';
 import { ErrorState } from '../components';
+import { DiscountsScreen } from '../discounts';
+import { HoursScreen } from '../hours';
 import { MenuScreen } from '../menu/menu-screen';
 import { OrdersScreen } from '../orders';
 import { SignIn } from '../sign-in';
@@ -35,7 +37,7 @@ export default function Index() {
   return <ApplyScreen />;
 }
 
-type Tab = 'orders' | 'today' | 'menu' | 'staff';
+type Tab = 'orders' | 'today' | 'menu' | 'hours' | 'discounts' | 'staff';
 
 /** The working app: orders and today for everyone on staff; the owner also gets the Staff tab. */
 function RestaurantHome(props: { restaurantId: string }) {
@@ -52,7 +54,13 @@ function RestaurantHome(props: { restaurantId: string }) {
     { id: 'orders', label: t(locale, 'staff.ordersTab') },
     { id: 'today', label: t(locale, 'tabs.today') },
     { id: 'menu', label: t(locale, 'menu.title') },
-    ...(owner.isSuccess ? [{ id: 'staff' as const, label: t(locale, 'staff.title') }] : []),
+    ...(owner.isSuccess
+      ? [
+          { id: 'hours' as const, label: t(locale, 'tabs.hours') },
+          { id: 'discounts' as const, label: t(locale, 'tabs.discounts') },
+          { id: 'staff' as const, label: t(locale, 'staff.title') },
+        ]
+      : []),
   ];
   const tabs = (
     <View style={styles.tabs}>
@@ -65,6 +73,10 @@ function RestaurantHome(props: { restaurantId: string }) {
   );
 
   if (tab === 'staff' && owner.isSuccess) return <StaffScreen restaurantId={props.restaurantId} header={tabs} />;
+  if (tab === 'hours' && owner.isSuccess) return <HoursScreen restaurantId={props.restaurantId} header={tabs} />;
+  if (tab === 'discounts' && owner.isSuccess) {
+    return <DiscountsScreen restaurantId={props.restaurantId} header={tabs} />;
+  }
   if (tab === 'menu') {
     return <MenuScreen restaurantId={props.restaurantId} isOwner={owner.isSuccess} header={tabs} />;
   }
