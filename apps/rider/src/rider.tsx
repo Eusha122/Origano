@@ -37,8 +37,8 @@ export function RidersOnly() {
 }
 
 /** Online switch, then the order the rider holds, or else the offers to claim. */
-export function RiderScreen(props: { isOnline: boolean; pausedReason?: string }) {
-  const paused = props.pausedReason !== undefined;
+export function RiderScreen(props: { isOnline: boolean; pausedReason?: string; agencyPaused?: boolean }) {
+  const paused = props.pausedReason !== undefined || props.agencyPaused === true;
   const { locale } = useLocale();
   const api = useApi();
   const session = useSession();
@@ -66,7 +66,9 @@ export function RiderScreen(props: { isOnline: boolean; pausedReason?: string })
       {paused ? (
         <View role="alert" style={styles.stack}>
           <Body large strong>
-            {t(locale, 'rider.suspended', { reason: (props.pausedReason ?? '').replace(/[.\s]+$/, '') })}
+            {props.agencyPaused
+              ? t(locale, 'rider.agencyPaused')
+              : t(locale, 'rider.suspended', { reason: (props.pausedReason ?? '').replace(/[.\s]+$/, '') })}
           </Body>
           {order ? <Body large>{t(locale, 'rider.suspendedFinish')}</Body> : null}
         </View>

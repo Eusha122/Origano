@@ -1,7 +1,7 @@
 import { connectRealtime, type RealtimeStatus } from '@oregano/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { handleOrderHint } from './queries';
+import { handleAuthFailed, handleOrderHint } from './queries';
 import { useApiContext } from './session';
 
 /**
@@ -23,7 +23,13 @@ export function useRealtimeHints(): RealtimeStatus {
     const connection = connectRealtime({
       url: realtimeUrl,
       getToken: () => session.getAccessToken(),
-      refresh: () => api.refresh(),
+      // The server closes the socket with 4401 when roles, staff membership or rider status change, as well as when
+      // the token expires: after renewing, check who this person is now.
+      refresh: async () => {
+        const renewed = await api.refresh();
+        if (renewed) void handleAuthFailed(queryClient);
+        return renewed;
+      },
       onHint: (orderId) => void handleOrderHint(queryClient, orderId),
       onStatus: setStatus,
     });

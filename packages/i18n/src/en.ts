@@ -164,6 +164,7 @@ export const en = {
   'rider.rejected': 'We could not approve your application: {reason}',
   'rider.suspended': 'Your account is paused: {reason}. Call Oregano support.',
   'rider.suspendedFinish': 'You can still finish the delivery you already picked up.',
+  'rider.agencyPaused': "Your agency's account is paused. Ask your agency or call Oregano support.",
   'join.independent': 'Independent rider',
   'join.agency': 'Agency rider',
   'join.restaurantStaff': "A restaurant's own rider",

@@ -74,8 +74,8 @@ test('a restaurant goes from application to approved, and appears closed to cust
   await confirm(admin, 'Approve');
   await expect(admin.getByText('Status: approved')).toBeVisible();
 
-  // The owner's app now opens on the orders screen, and the customer app lists the new restaurant as closed.
-  await owner.reload();
+  // The owner's app moves on by itself, without a reload: the server tells it who they are now.
+  // The customer app lists the new restaurant as closed.
   await expect(owner.getByRole('heading', { name: 'Orders', exact: true })).toBeVisible();
   const customer = await openApp(browser, APP_URLS.customer);
   const card = customer.getByRole('link', { name: 'Spice Garden' });
@@ -96,7 +96,6 @@ test('a rider goes from application to approved and can go online', async ({ bro
   await confirm(admin, 'Approve');
   await expect(admin.getByText('Status: approved')).toBeVisible();
 
-  await rider.reload();
   await rider.getByRole('button', { name: 'Go online', exact: true }).click();
   await expect(rider.getByRole('button', { name: 'Go offline', exact: true })).toBeVisible();
 });
@@ -119,7 +118,6 @@ test('a rejected rider sees the reason, replaces a document, and is in the queue
   await confirm(admin, 'Reject');
   await expect(admin.getByText('Status: rejected')).toBeVisible();
 
-  await rider.reload();
   await expect(rider.getByText(`We could not approve your application: ${reason}`)).toBeVisible();
   // Replace one document, then send it again.
   await uploadDocument(rider, 'ID card, front');

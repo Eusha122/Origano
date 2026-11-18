@@ -25,7 +25,8 @@ export default function Index() {
     );
   }
   const rider = session.me.rider;
-  if (rider?.status === 'approved') return <RiderScreen isOnline={rider.isOnline} />;
+  if (rider?.status === 'approved' && rider.agencyActive) return <RiderScreen isOnline={rider.isOnline} />;
+  if (rider?.status === 'approved') return <RiderScreen isOnline={false} agencyPaused />;
   return <Applicant status={rider?.status ?? null} />;
 }
 

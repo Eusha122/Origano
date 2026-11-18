@@ -24,7 +24,7 @@ export async function listRiderInvites(db: Executor, restaurantId: string): Prom
     SELECT i.phone, i.created_at, r.status AS rider_status
     FROM rider_invites i
     LEFT JOIN users u ON u.phone = i.phone
-    LEFT JOIN riders r ON r.user_id = u.id
+    LEFT JOIN riders r ON r.user_id = u.id AND r.restaurant_id = i.restaurant_id
     WHERE i.restaurant_id = ${restaurantId} ORDER BY i.created_at, i.phone`);
   return rows.map(toInvite);
 }

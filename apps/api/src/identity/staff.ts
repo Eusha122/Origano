@@ -18,7 +18,8 @@ type StaffRow = { user_id: string; phone: string; name: string | null; role: 'ow
 const toMember = (r: StaffRow): StaffMember => ({
   userId: r.user_id,
   phone: r.phone,
-  name: r.name,
+  // A staff member's name is private to them; only owners (approved by the team) show theirs.
+  name: r.role === 'owner' ? r.name : null,
   role: r.role,
   addedAt: new Date(r.created_at).toISOString(),
 });

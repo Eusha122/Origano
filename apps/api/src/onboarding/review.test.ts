@@ -527,4 +527,19 @@ describe('application review', () => {
       expect((await call('POST', `/v1/admin/applications/rider/${id}/approve`, admin)).statusCode).toBe(403);
     });
   });
+
+  describe('limits', () => {
+    it('opening documents is not counted against the upload limit', async () => {
+      const { id } = await submittedRestaurant();
+      const docs = (await t.db.execute<{ id: string }>(sql`SELECT id FROM identity_documents`)).map((d) => d.id);
+      expect(docs.length).toBeGreaterThan(0);
+      const admin = await t.signIn(ONBOARDING);
+      expect(id).toBeTruthy();
+      // The standard limit is 30 uploads an hour: an admin opening 40 links must not meet it.
+      for (let i = 0; i < 40; i++) {
+        const res = await call('POST', `/v1/admin/documents/${docs[0]}/link`, admin);
+        expect(res.statusCode, `link ${i}`).toBe(200);
+      }
+    });
+  });
 });

@@ -172,4 +172,17 @@ describe('restaurant staff and rider invites', () => {
     );
     expect(bound[0]?.restaurant_id).toBe(t.demo().restaurantId);
   });
+
+  it('does not hand an owner the name of whoever they add, or the rider status of any invited phone', async () => {
+    // Rahim (01711000003) is an approved independent rider with a name.
+    const added = await call('POST', OWNER, `${base()}/staff`, { phone: '01711000003' });
+    expect(added.statusCode).toBe(201);
+    expect(added.json()).toMatchObject({ name: null });
+    const listed = ((await call('GET', OWNER, `${base()}/staff`)).json() as { members: StaffMember[] }).members;
+    expect(listed.find((m) => m.role === 'staff')?.name).toBeNull();
+    expect(listed.find((m) => m.role === 'owner')?.name).toBe('Burger Lane owner');
+
+    const invited = await call('POST', OWNER, `${base()}/rider-invites`, { phone: '01711000003' });
+    expect(invited.json()).toMatchObject({ riderStatus: null });
+  });
 });

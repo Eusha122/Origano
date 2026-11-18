@@ -36,6 +36,8 @@ export const Me = z.object({
       isOnline: z.boolean(),
       status: z.enum(ACCOUNT_STATUSES),
       type: z.enum(RIDER_TYPES),
+      /** False when the rider's agency is suspended: approved, but not allowed to work. */
+      agencyActive: z.boolean(),
     })
     .nullable(),
 });

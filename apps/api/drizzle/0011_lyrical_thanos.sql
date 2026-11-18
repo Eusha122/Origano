@@ -33,6 +33,8 @@ ALTER TABLE "riders" ADD COLUMN "last_activity_at" timestamp with time zone DEFA
 ALTER TABLE "rider_invites" ADD CONSTRAINT "rider_invites_restaurant_id_restaurants_id_fk" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "riders" ADD CONSTRAINT "riders_agency_id_agencies_id_fk" FOREIGN KEY ("agency_id") REFERENCES "public"."agencies"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "riders" ADD CONSTRAINT "riders_restaurant_id_restaurants_id_fk" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+UPDATE "riders" SET "type" = 'independent' WHERE "type" = 'agency' AND "agency_id" IS NULL;--> statement-breakpoint
+UPDATE "riders" SET "type" = 'independent' WHERE "type" = 'restaurant_staff' AND "restaurant_id" IS NULL;--> statement-breakpoint
 ALTER TABLE "riders" ADD CONSTRAINT "riders_agency_matches_type" CHECK (("riders"."type" = 'agency') = ("riders"."agency_id" IS NOT NULL));--> statement-breakpoint
 ALTER TABLE "riders" ADD CONSTRAINT "riders_restaurant_matches_type" CHECK (("riders"."type" = 'restaurant_staff') = ("riders"."restaurant_id" IS NOT NULL));--> statement-breakpoint
 ALTER TABLE "riders" ADD CONSTRAINT "riders_vehicle_type_valid" CHECK ("riders"."vehicle_type" IS NULL OR "riders"."vehicle_type" IN ('bicycle', 'motorcycle', 'electric_bike', 'on_foot'));

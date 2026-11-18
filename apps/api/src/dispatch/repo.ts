@@ -11,6 +11,13 @@ export type ClaimResult = 'claimed' | 'already_mine' | 'taken' | 'not_claimable'
  */
 export function claimOrder(db: Db, riderId: string, orderId: string): Promise<ClaimResult> {
   return db.transaction(async (tx) => {
+    // Share-lock the rider so a suspension (which locks the same row) either finishes first, and this claim sees it,
+    // or waits for this claim and then releases the order. Neither can slip past the other.
+    const allowed = await tx.execute(sql`
+      SELECT r.user_id FROM riders r LEFT JOIN agencies a ON a.id = r.agency_id
+      WHERE r.user_id = ${riderId} AND r.status = 'approved' AND r.is_online AND (a.id IS NULL OR a.status = 'approved')
+      FOR SHARE OF r`);
+    if (allowed.length === 0) return 'not_claimable';
     const won = await tx.execute<{
       id: string;
       customer_id: string;

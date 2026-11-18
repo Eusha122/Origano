@@ -167,6 +167,7 @@ export const bn: Record<MessageKey, string> = {
   'rider.rejected': 'আমরা আপনার আবেদন অনুমোদন করতে পারিনি: {reason}',
   'rider.suspended': 'আপনার অ্যাকাউন্ট বন্ধ রাখা হয়েছে: {reason}। Oregano সাপোর্টে ফোন করুন।',
   'rider.suspendedFinish': 'আপনি যে ডেলিভারি ইতিমধ্যে নিয়েছেন সেটি শেষ করতে পারবেন।',
+  'rider.agencyPaused': 'আপনার এজেন্সির অ্যাকাউন্ট বন্ধ রাখা হয়েছে। আপনার এজেন্সিকে জিজ্ঞাসা করুন বা Oregano সাপোর্টে ফোন করুন।',
   'join.independent': 'Independent rider',
   'join.agency': 'Agency rider',
   'join.restaurantStaff': "A restaurant's own rider",

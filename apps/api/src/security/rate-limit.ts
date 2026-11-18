@@ -89,7 +89,7 @@ export async function registerRateLimits(
       'uploads',
       limits.uploadsPerUserHour,
       60 * MINUTE,
-      (r) => r.method === 'POST' && route(r).includes('/documents/'),
+      (r) => r.method === 'POST' && route(r).startsWith('/v1/onboarding/') && route(r).includes('/documents/'),
       byUser,
     ),
   ];

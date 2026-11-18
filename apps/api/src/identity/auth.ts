@@ -95,6 +95,7 @@ export function toMe(user: AuthUser): Me {
           isOnline: user.rider.isOnline,
           status: user.rider.status as AccountStatus,
           type: user.rider.type,
+          agencyActive: user.rider.agencyActive,
         }
       : null,
   };

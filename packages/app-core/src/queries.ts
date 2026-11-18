@@ -36,5 +36,10 @@ export async function handleOrderHint(client: QueryClient, orderId: string): Pro
  * useSession signs out, which also closes the socket; if authentication was only slow, nothing changes.
  */
 export async function handleAuthFailed(client: QueryClient): Promise<void> {
-  await client.invalidateQueries({ queryKey: queryKeys.me, exact: true });
+  await Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.me, exact: true }),
+    // An approval, a rejection or a suspension changes the application the person is looking at, too.
+    client.invalidateQueries({ queryKey: queryKeys.restaurantApplication, exact: true }),
+    client.invalidateQueries({ queryKey: queryKeys.riderApplication, exact: true }),
+  ]);
 }

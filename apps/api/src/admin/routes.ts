@@ -163,8 +163,7 @@ export function adminRoutes(app: FastifyInstance, config: Config, { db, clock }:
   });
   app.post<{ Params: { id: string } }>('/admin/restaurants/:id/suspend', async (request) => {
     const admin = requirePermission(request, 'accounts.manage');
-    reason(request.body);
-    return suspendRestaurant(db, admin.id, uuid(request.params.id));
+    return suspendRestaurant(db, admin.id, uuid(request.params.id), reason(request.body));
   });
   app.post<{ Params: { id: string } }>('/admin/restaurants/:id/reinstate', async (request) => {
     const admin = requirePermission(request, 'accounts.manage');
@@ -172,8 +171,7 @@ export function adminRoutes(app: FastifyInstance, config: Config, { db, clock }:
   });
   app.post<{ Params: { id: string } }>('/admin/agencies/:id/suspend', async (request) => {
     const admin = requirePermission(request, 'accounts.manage');
-    reason(request.body);
-    return suspendAgency(db, admin.id, uuid(request.params.id));
+    return suspendAgency(db, admin.id, uuid(request.params.id), reason(request.body));
   });
   app.post<{ Params: { id: string } }>('/admin/agencies/:id/reinstate', async (request) => {
     const admin = requirePermission(request, 'accounts.manage');

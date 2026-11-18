@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildApp as build } from './app';
+import { buildApp as build, safeError } from './app';
 import { loadConfig } from './config';
 import { AppError } from './errors';
 import { TEST_DATA_KEYS } from './testing/keys';
@@ -162,5 +162,26 @@ describe('security headers and log redaction', () => {
     const text = lines.join('');
     expect(text).toContain('[Redacted]');
     for (const secret of ['sekret-token', 'sekret-cookie', 'sekret-ticket']) expect(text).not.toContain(secret);
+  });
+
+  it('logs a failed query without the values it carried', () => {
+    const database = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      table_name: 'users',
+      constraint_name: 'users_phone_unique',
+      detail: 'Key (phone)=(+8801711000001) already exists.',
+    });
+    const wrapped = Object.assign(
+      new Error('Failed query: INSERT INTO users (phone) VALUES ($1)\nparams: +8801711000001'),
+      {
+        name: 'DrizzleQueryError',
+        cause: database,
+      },
+    );
+    const logged = JSON.stringify(safeError(wrapped));
+    expect(logged).toContain('23505');
+    expect(logged).toContain('users_phone_unique');
+    expect(logged).not.toContain('+8801711000001');
+    expect(logged).not.toContain('Failed query');
   });
 });

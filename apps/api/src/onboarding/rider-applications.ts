@@ -149,6 +149,7 @@ export async function saveMyRiderApplication(
     const zone = await tx.execute<{ id: string }>(sql`SELECT id FROM zones WHERE id = ${body.zoneId} AND is_active`);
     if (!zone[0]) throw invalid('That zone is not open yet.');
 
+    let zoneId = body.zoneId;
     let agencyId: string | null = null;
     let restaurantId: string | null = null;
     if (body.type === 'agency') {
@@ -169,6 +170,11 @@ export async function saveMyRiderApplication(
       if (restaurantId === null) {
         throw new AppError('rider_invite_missing', 422, 'No restaurant has invited this phone number.');
       }
+      // A restaurant's own rider works in that restaurant's zone: elsewhere they would never see an offer.
+      const home = await tx.execute<{ zone_id: string }>(
+        sql`SELECT zone_id FROM restaurants WHERE id = ${restaurantId}`,
+      );
+      zoneId = home[0]?.zone_id ?? body.zoneId;
     }
 
     await tx.execute(sql`UPDATE users SET name = ${body.name} WHERE id = ${userId}`);
@@ -176,7 +182,7 @@ export async function saveMyRiderApplication(
       await tx.execute(sql`
         INSERT INTO riders (user_id, zone_id, type, status, vehicle_type, vehicle_registration, guarantor_name,
           guarantor_phone, guarantor_relation, agency_id, restaurant_id)
-        VALUES (${userId}, ${body.zoneId}, ${body.type}, 'applied', ${body.vehicleType}, ${registration},
+        VALUES (${userId}, ${zoneId}, ${body.type}, 'applied', ${body.vehicleType}, ${registration},
           ${body.guarantor.name}, ${guarantorPhone}, ${body.guarantor.relation}, ${agencyId}, ${restaurantId})`);
       await writeAudit(tx, {
         actor: { type: 'user', id: userId },
@@ -187,7 +193,7 @@ export async function saveMyRiderApplication(
       });
     } else {
       await tx.execute(sql`
-        UPDATE riders SET zone_id = ${body.zoneId}, type = ${body.type}, vehicle_type = ${body.vehicleType},
+        UPDATE riders SET zone_id = ${zoneId}, type = ${body.type}, vehicle_type = ${body.vehicleType},
           vehicle_registration = ${registration}, guarantor_name = ${body.guarantor.name},
           guarantor_phone = ${guarantorPhone}, guarantor_relation = ${body.guarantor.relation},
           agency_id = ${agencyId}, restaurant_id = ${restaurantId}, last_activity_at = now()

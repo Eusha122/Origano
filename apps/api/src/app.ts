@@ -70,6 +70,29 @@ const REDACTED_PATHS = [
   '*.headers["set-cookie"]',
 ];
 
+/**
+ * What may be logged about a failure. A failed database query's message carries its parameters (phones, names,
+ * guarantor details) and PostgreSQL's `detail` repeats the offending values, so only the code, table and
+ * constraint are kept from those.
+ */
+export function safeError(error: unknown): unknown {
+  const cause = (error as { cause?: unknown } | null)?.cause;
+  const source = typeof cause === 'object' && cause !== null ? cause : error;
+  if (typeof source !== 'object' || source === null) return { message: 'unknown error' };
+  const pg = source as {
+    code?: unknown;
+    table_name?: unknown;
+    constraint_name?: unknown;
+    message?: unknown;
+    name?: unknown;
+  };
+  const isDatabase = typeof pg.code === 'string' && typeof cause === 'object';
+  if (isDatabase || (error as { name?: unknown }).name === 'DrizzleQueryError') {
+    return { name: 'DatabaseError', code: pg.code, table: pg.table_name, constraint: pg.constraint_name };
+  }
+  return error;
+}
+
 export async function buildApp(deps: {
   config: Config;
   checks: ReadinessCheck[];
@@ -118,7 +141,7 @@ export async function buildApp(deps: {
       const known = CLIENT_ERRORS[clientStatus] ?? CLIENT_ERRORS[400];
       return reply.code(clientStatus).send({ error: { ...known, requestId: request.id } });
     }
-    request.log.error({ err: error }, 'unhandled error');
+    request.log.error({ err: safeError(error) }, 'unhandled error');
     return reply
       .code(500)
       .send({ error: { code: 'internal', message: 'Something went wrong.', requestId: request.id } });

@@ -253,6 +253,48 @@ describe('suspending and reinstating accounts', () => {
       expect((await audits('agency.reinstated')).n).toBe(1);
     });
   });
+
+  describe('claims and agencies at the edges', () => {
+    it('a claim from a rider who is no longer allowed to work is refused inside the claim itself', async () => {
+      const id = await place();
+      await owner(id, 'accept', { readyInMinutes: 20 });
+      await owner(id, 'ready');
+      const rider = await riderId(RIDER_A);
+      await t.db.execute(sql`UPDATE riders SET is_online = true WHERE user_id = ${rider}`);
+      await t.db.execute(sql`UPDATE riders SET status = 'suspended' WHERE user_id = ${rider}`);
+      const { claimOrder } = await import('../dispatch/repo');
+      expect(await claimOrder(t.db, rider, id)).toBe('not_claimable');
+      const [row] = await t.db.execute<{ rider_id: string | null }>(sql`SELECT rider_id FROM orders WHERE id = ${id}`);
+      expect(row?.rider_id).toBeNull();
+    });
+
+    it('tells a rider whose agency is suspended, through me', async () => {
+      const agency = (
+        await post(ONBOARDING, '/v1/admin/agencies', { name: 'Swift Riders', contactPhone: '01911999999' })
+      ).json() as { id: string };
+      await t.db.execute(
+        sql`UPDATE riders SET type = 'agency', agency_id = ${agency.id} WHERE user_id = ${await riderId(RIDER_A)}`,
+      );
+      expect(((await get(RIDER_A, '/v1/me')).json() as { rider: { agencyActive: boolean } }).rider.agencyActive).toBe(
+        true,
+      );
+      await post(ONBOARDING, `/v1/admin/agencies/${agency.id}/suspend`, REASON);
+      const me = (await get(RIDER_A, '/v1/me')).json() as {
+        rider: { status: string; agencyActive: boolean };
+        roles: string[];
+      };
+      expect(me.rider).toMatchObject({ status: 'approved', agencyActive: false });
+      expect(me.roles).not.toContain('rider');
+    });
+
+    it('keeps the reason a restaurant or agency was suspended in the audit log', async () => {
+      await post(ONBOARDING, `/v1/admin/restaurants/${t.demo().restaurantId}/suspend`, REASON);
+      const rows = await t.db.execute<{ data: { reason?: string } }>(
+        sql`SELECT data FROM audit_log WHERE action = 'restaurant.suspended'`,
+      );
+      expect(rows[0]?.data.reason).toBe(REASON.reason);
+    });
+  });
 });
 
 describe('account lists for the admin accounts tab', () => {

@@ -45,7 +45,7 @@ export async function suspendRider(db: Db, adminId: string, userId: string, reas
         sql`UPDATE riders SET status = 'suspended', suspended_reason = ${reason} WHERE user_id = ${userId}`,
       );
       const released = await stopRider(tx, userId);
-      await audit(tx, adminId, 'rider.suspended', 'rider', userId, { released });
+      await audit(tx, adminId, 'rider.suspended', 'rider', userId, { released, reason });
     }
     return { id: userId, status: 'suspended' };
   });
@@ -69,7 +69,13 @@ export async function reinstateRider(db: Db, adminId: string, userId: string): P
 
 // ---------- restaurants ----------
 
-async function setRestaurant(db: Db, adminId: string, id: string, kind: Kind): Promise<AccountSummary> {
+async function setRestaurant(
+  db: Db,
+  adminId: string,
+  id: string,
+  kind: Kind,
+  reason?: string,
+): Promise<AccountSummary> {
   return db.transaction(async (tx) => {
     const rows = await tx.execute<{ status: string }>(sql`SELECT status FROM restaurants WHERE id = ${id} FOR UPDATE`);
     const current = rows[0]?.status;
@@ -81,13 +87,21 @@ async function setRestaurant(db: Db, adminId: string, id: string, kind: Kind): P
         sql`SELECT user_id FROM restaurant_staff WHERE restaurant_id = ${id}`,
       );
       for (const member of staff) await accessChanged(tx, member.user_id);
-      await audit(tx, adminId, kind === 'suspend' ? 'restaurant.suspended' : 'restaurant.reinstated', 'restaurant', id);
+      await audit(
+        tx,
+        adminId,
+        kind === 'suspend' ? 'restaurant.suspended' : 'restaurant.reinstated',
+        'restaurant',
+        id,
+        reason ? { reason } : {},
+      );
     }
     return { id, status: STATUS_AFTER[kind] };
   });
 }
 
-export const suspendRestaurant = (db: Db, adminId: string, id: string) => setRestaurant(db, adminId, id, 'suspend');
+export const suspendRestaurant = (db: Db, adminId: string, id: string, reason: string) =>
+  setRestaurant(db, adminId, id, 'suspend', reason);
 export const reinstateRestaurant = (db: Db, adminId: string, id: string) => setRestaurant(db, adminId, id, 'reinstate');
 
 // ---------- agencies ----------
@@ -127,7 +141,7 @@ export async function createAgency(db: Db, adminId: string, body: CreateAgencyBo
   });
 }
 
-export async function suspendAgency(db: Db, adminId: string, id: string): Promise<AccountSummary> {
+export async function suspendAgency(db: Db, adminId: string, id: string, reason: string): Promise<AccountSummary> {
   return db.transaction(async (tx) => {
     const rows = await tx.execute<{ status: string }>(sql`SELECT status FROM agencies WHERE id = ${id} FOR UPDATE`);
     const current = rows[0]?.status;
@@ -139,7 +153,7 @@ export async function suspendAgency(db: Db, adminId: string, id: string): Promis
       );
       let released = 0;
       for (const rider of riders) released += await stopRider(tx, rider.user_id);
-      await audit(tx, adminId, 'agency.suspended', 'agency', id, { riders: riders.length, released });
+      await audit(tx, adminId, 'agency.suspended', 'agency', id, { riders: riders.length, released, reason });
     }
     return { id, status: 'suspended' };
   });
@@ -166,7 +180,7 @@ function audit(
   action: AuditAction,
   targetType: string,
   targetId: string,
-  data: Record<string, number> = {},
+  data: Record<string, number | string> = {},
 ): Promise<void> {
   return writeAudit(tx, { actor: { type: 'user', id: adminId }, action, targetType, targetId, data });
 }
