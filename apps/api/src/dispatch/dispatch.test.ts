@@ -142,7 +142,8 @@ describe('riders: offers, claiming and delivering', () => {
       const rows = await t.db.execute<{ rider_id: string }>(sql`SELECT rider_id FROM orders WHERE id = ${placed.id}`);
       expect(rows[0]?.rider_id).toBe(winner.json().rider.id);
     }
-  });
+    // Twenty rounds of place, accept and a double claim: slow where the database is across a network.
+  }, 60_000);
 
   it('claiming twice is harmless', async () => {
     const placed = await accepted();
