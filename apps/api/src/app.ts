@@ -81,6 +81,8 @@ export async function buildApp(deps: {
   await app.register(cors, {
     origin: deps.config.corsOrigins,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    // The apps quote the request id when something fails, so the browser must let them read it.
+    exposedHeaders: ['x-request-id'],
   });
 
   healthRoutes(app, deps.checks);

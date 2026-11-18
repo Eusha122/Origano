@@ -123,4 +123,11 @@ describe('api skeleton', () => {
     expect(tooLarge.statusCode).toBe(413);
     expect(tooLarge.json().error).toMatchObject({ code: 'payload_too_large' });
   });
+
+  it('lets a browser on an allowed origin read the request id', async () => {
+    const app = await buildApp({ config: { ...config, corsOrigins: ['http://localhost:8081'] }, checks: [pass] });
+    const res = await app.inject({ method: 'GET', url: '/healthz', headers: { origin: 'http://localhost:8081' } });
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:8081');
+    expect(res.headers['access-control-expose-headers']).toBe('x-request-id');
+  });
 });
