@@ -23,7 +23,17 @@ export function Applications() {
     refetchInterval: 30_000,
   });
 
-  if (open) return <ApplicationDetail item={open} onBack={() => setOpen(null)} />;
+  if (open)
+    return (
+      <ApplicationDetail
+        item={open}
+        onBack={() => {
+          setOpen(null);
+          // Coming back must show what changed while the application was open, not what was cached.
+          void queue.refetch();
+        }}
+      />
+    );
 
   return (
     <>

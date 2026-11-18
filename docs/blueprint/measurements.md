@@ -25,3 +25,14 @@ Measured again 18 November 2026 at the end of Plan 02 (customer app with sign-in
 | Shared chunk, gzipped               | 142 KB |
 
 At roughly 400 kbit/s, 444 KB takes about 9 seconds to download, so the Plan 05 decision above is more pressing than it was.
+
+## Restaurant and rider web exports
+
+Measured 18 November 2026 at the end of Plan 03 with `pnpm --filter @oregano/restaurant build:web` and `pnpm --filter @oregano/rider build:web`. Both apps gained the application, status, staff and joining screens and the photo picker.
+
+| What                    | Restaurant | Rider   |
+| ----------------------- | ---------- | ------- |
+| All JavaScript, gzipped | 466 KB     | 464 KB  |
+| All JavaScript, raw     | 1.94 MB    | 1.94 MB |
+
+These apps are used on staff phones, often on a good connection at a restaurant, but a rider joining in the street may not have one. At roughly 400 kbit/s, 464 KB takes about 9 seconds, the same concern as for the customer app, so the Plan 05 and Plan 10 decisions on splitting and on native builds apply to them too.

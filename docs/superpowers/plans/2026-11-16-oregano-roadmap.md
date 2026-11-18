@@ -6,19 +6,19 @@ The platform is too large for one plan. It is split into eleven plans, each endi
 
 ## Order of work
 
-| Plan | Name                               | Depends on     | Status                                                                                                       |
-| ---- | ---------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------ |
-| 01   | Foundation                         | none           | Done, merged 16 Nov 2026                                                                                     |
-| 02   | First order, end to end            | 01             | Written: `2026-11-16-plan-02-first-order.md`                                                                 |
-| 03   | Identity hardening and onboarding  | 02             | Written: `2026-11-18-plan-03-identity-and-onboarding.md` (Task 21 waits for the founder's two SMS providers) |
-| 04   | Catalog and zones, complete        | 02             | To write                                                                                                     |
-| 05   | Customer experience, complete      | 03, 04         | To write                                                                                                     |
-| 06   | Order operations and failure paths | 02             | To write                                                                                                     |
-| 07   | Money                              | 06             | To write                                                                                                     |
-| 08   | Hangout cart                       | 05             | To write                                                                                                     |
-| 09   | Admin dashboard, complete          | 03, 04, 06, 07 | To write                                                                                                     |
-| 10   | Native apps                        | 05, 06         | To write                                                                                                     |
-| 11   | Production hardening and launch    | all            | To write                                                                                                     |
+| Plan | Name                               | Depends on     | Status                                                                                          |
+| ---- | ---------------------------------- | -------------- | ----------------------------------------------------------------------------------------------- |
+| 01   | Foundation                         | none           | Done, merged 16 Nov 2026                                                                        |
+| 02   | First order, end to end            | 01             | Written: `2026-11-16-plan-02-first-order.md`                                                    |
+| 03   | Identity hardening and onboarding  | 02             | Done except Task 21 (two real SMS providers, waiting for the founder to name them), 18 Nov 2026 |
+| 04   | Catalog and zones, complete        | 02             | To write                                                                                        |
+| 05   | Customer experience, complete      | 03, 04         | To write                                                                                        |
+| 06   | Order operations and failure paths | 02             | To write                                                                                        |
+| 07   | Money                              | 06             | To write                                                                                        |
+| 08   | Hangout cart                       | 05             | To write                                                                                        |
+| 09   | Admin dashboard, complete          | 03, 04, 06, 07 | To write                                                                                        |
+| 10   | Native apps                        | 05, 06         | To write                                                                                        |
+| 11   | Production hardening and launch    | all            | To write                                                                                        |
 
 Plans 03 and 04 can run in either order. So can 06 and 08.
 

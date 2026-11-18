@@ -8,36 +8,40 @@ Prerequisites: Node 24, pnpm (via corepack), Docker.
 
 ```bash
 pnpm install          # install everything
-pnpm db:up            # start local PostgreSQL (PostGIS) and Redis in Docker
+pnpm db:up            # start local PostgreSQL (PostGIS), Redis and S3-compatible storage (SeaweedFS, port 9000) in Docker
 pnpm db:migrate       # apply migrations to the local database
 pnpm db:seed          # seed the Chapainawabganj zone (safe on any database)
 pnpm db:seed:demo     # add the demo restaurant and users (only on `oregano` or a `*_test` database, never in production)
+pnpm --filter @oregano/api team -- grant|revoke|list ... --operator "<name>"   # team roles: only an operator changes them, and it is audited
+pnpm --filter @oregano/api otp -- unlock <phone> --operator "<name>"          # clears an OTP lock, audited
 pnpm verify           # the completion gate: lint, typecheck, tests, web build, browser tests
 pnpm format           # apply Biome formatting
 pnpm --filter @oregano/domain test   # one package's tests
 pnpm test:e2e         # browser tests only, including the first-order journey (needs pnpm db:up)
 ```
 
-API tests use a real database (`oregano_test`), created automatically by `infra/postgres-init` the first time `pnpm db:up` runs.
+API tests use a real database (`oregano_test`), created automatically by `infra/postgres-init` the first time `pnpm db:up` runs, and the real S3 server (bucket `oregano-test`, created on first use). MinIO's community image is no longer published, so storage is SeaweedFS (`chrislusf/seaweedfs`, pinned in `infra/docker-compose.yml` and `ci.yml`).
 
-Browser tests live in `e2e/` (Playwright). They start their own six servers, never reusing a running one: the API, the outbox worker and the four apps, against their own database `oregano_e2e_test`, which global setup migrates, empties (it refuses any database not named `*_test`) and seeds with the demo data. Sign-in codes come from the development-only `GET /v1/dev/otp/:phone` (`DEV_OTP_PEEK=true`).
+Settings the API reads (see `apps/api/.env.example`): `DATA_KEYS` (required: `kid:base64key`, each key 32 bytes, the first one seals new data), `SMS_PROVIDERS` (`log` locally; production needs two real providers), `LIMITS_PROFILE` (`relaxed` multiplies the rate limits by 100 for local and browser tests; production refuses it), `TRUST_PROXY`, `S3_ENDPOINT`, `S3_BUCKET`, `DEV_OTP_PEEK`. Production refuses to start on an unsafe setting.
+
+Browser tests live in `e2e/` (Playwright). They start their own six servers, never reusing a running one: the API, the outbox worker and the four apps, against their own database `oregano_e2e_test`, which global setup migrates, empties (it refuses any database not named `*_test`) and seeds with the demo data. Global setup also empties the document bucket `oregano-e2e` (it refuses any bucket not named `*-e2e`). `e2e/tests/onboarding.spec.ts` takes a restaurant and a rider from application to approved through the apps and the admin, and covers a rejection and resubmission. Sign-in codes come from the development-only `GET /v1/dev/otp/:phone` (`DEV_OTP_PEEK=true`).
 
 |                    | API  | Customer | Restaurant | Rider | Admin |
 | ------------------ | ---- | -------- | ---------- | ----- | ----- |
 | Dev ports          | 4000 | 8081     | 8082       | 8083  | 8084  |
 | Journey test ports | 4100 | 8191     | 8192       | 8193  | 8194  |
 
-The e2e config reads `E2E_DATABASE_URL` and `E2E_REDIS_URL` (defaults: the local Docker services). `pnpm verify` also builds all three Expo web apps and the admin.
+The e2e config reads `E2E_DATABASE_URL`, `E2E_REDIS_URL` and `E2E_S3_ENDPOINT` (defaults: the local Docker services). `pnpm verify` also builds all three Expo web apps and the admin.
 
 ### Running the gate in a clean container
 
 Proves the branch passes from a fresh checkout, not just on this machine. With `pnpm db:up` running:
 
 ```bash
-docker run --rm --add-host=host.docker.internal:host-gateway   -v "$(pwd -W 2>/dev/null || pwd)/.git:/src.git:ro"   -e DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano   -e TEST_DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano_test   -e E2E_DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano_e2e_test   -e REDIS_URL=redis://host.docker.internal:6379   -e E2E_REDIS_URL=redis://host.docker.internal:6379   node:24 bash -c "corepack enable && git clone /src.git /work && cd /work && git checkout plan-02-first-order     && pnpm install && pnpm --filter @oregano/e2e exec playwright install --with-deps chromium     && pnpm db:migrate && pnpm verify"
+docker run --rm --add-host=host.docker.internal:host-gateway   -v "$(pwd -W 2>/dev/null || pwd)/.git:/src.git:ro"   -e DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano   -e TEST_DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano_test   -e E2E_DATABASE_URL=postgres://oregano:oregano@host.docker.internal:5432/oregano_e2e_test   -e REDIS_URL=redis://host.docker.internal:6379   -e E2E_REDIS_URL=redis://host.docker.internal:6379   -e S3_ENDPOINT=http://host.docker.internal:9000   -e E2E_S3_ENDPOINT=http://host.docker.internal:9000   node:24 bash -c "corepack enable && git clone /src.git /work && cd /work && git checkout plan-02-first-order     && pnpm install && pnpm --filter @oregano/e2e exec playwright install --with-deps chromium     && pnpm db:migrate && pnpm verify"
 ```
 
-The checkout is read-only (`/src.git` is mounted `:ro`). Every database and Redis URL points at `host.docker.internal`, never `localhost`, which inside the container is the container itself.
+The checkout is read-only (`/src.git` is mounted `:ro`). Every database, Redis and S3 URL points at `host.docker.internal`, never `localhost`, which inside the container is the container itself.
 
 On a Docker volume created before `oregano_e2e_test` existed, `infra/postgres-init` will not run again, so create it once by hand:
 
@@ -45,7 +49,7 @@ On a Docker volume created before `oregano_e2e_test` existed, `infra/postgres-in
 docker compose -f infra/docker-compose.yml exec postgres psql -U oregano -c "CREATE DATABASE oregano_e2e_test OWNER oregano;"
 ```
 
-Demo phones (from `pnpm db:seed:demo`): customer 01711000001, Burger Lane owner 01711000002, rider 01711000003, admin 01711000004, second rider 01711000005.
+Demo phones (from `pnpm db:seed:demo`): customer 01711000001, Burger Lane owner 01711000002, rider 01711000003, admin (superadmin) 01711000004, second rider 01711000005, onboarding team member 01711000006, support team member 01711000007. A new phone signs in as a plain customer and can apply to become a restaurant or a rider; sign-in codes come from `GET /v1/dev/otp/<phone>` in development.
 
 ## Layout
 
@@ -54,7 +58,7 @@ apps/api/         Fastify backend and the outbox worker (src/worker.ts)
 apps/customer/    Expo app (web, Android, iOS); screens in src/app/
 apps/restaurant/  Expo app for restaurant staff
 apps/rider/       Expo app for riders
-apps/admin/       Vite web dashboard for the Oregano team
+apps/admin/       Vite web dashboard for the Oregano team (orders, application review with audited document viewer, accounts, agencies, team)
 e2e/              Playwright browser tests across all four apps
 packages/contracts/ Request and response shapes shared by the API and the apps (zod)
 packages/api-client/ Typed API client and realtime socket, no React

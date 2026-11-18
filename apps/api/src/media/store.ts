@@ -1,8 +1,10 @@
 import {
   CreateBucketCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -65,4 +67,27 @@ export async function openStore(config: Pick<Config, 'nodeEnv' | 's3'>): Promise
   const store = createS3Store(config.s3, { serverSideEncryption: config.nodeEnv === 'production' });
   if (config.nodeEnv !== 'production') await store.ensureBucket();
   return store;
+}
+
+/**
+ * Empties a bucket, for the browser tests' own storage only: it refuses any bucket whose name does not end in
+ * `-e2e`, so it can never touch development or production documents.
+ */
+export async function emptyE2eBucket(cfg: Config['s3']): Promise<void> {
+  if (!cfg.bucket.endsWith('-e2e'))
+    throw new Error(`Refusing to empty bucket "${cfg.bucket}": its name must end in -e2e`);
+  const client = new S3Client({
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    forcePathStyle: cfg.forcePathStyle,
+    credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
+  });
+  const store = createS3Store(cfg);
+  await store.ensureBucket();
+  for (;;) {
+    const listed = await client.send(new ListObjectsV2Command({ Bucket: cfg.bucket }));
+    const keys = (listed.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+    if (keys.length === 0) return;
+    await client.send(new DeleteObjectsCommand({ Bucket: cfg.bucket, Delete: { Objects: keys } }));
+  }
 }

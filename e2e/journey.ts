@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { type APIRequestContext, type Browser, type BrowserContext, expect, type Page } from '@playwright/test';
 
 /** The journey's own ports, never the dev ones, so a dev server left running can never be tested by mistake. */
@@ -124,6 +125,27 @@ export async function openApp(browser: Browser, url: string, signedInAs?: string
   const page = await context.newPage();
   await page.goto(url);
   return page;
+}
+
+/** The e2e document fixture: a small valid PNG. */
+export const DOCUMENT_FIXTURE = fileURLToPath(new URL('./fixtures/document.png', import.meta.url));
+
+/**
+ * Chooses a photo for the document picker with this label: the picker's button opens the browser's file chooser,
+ * and the file goes in it. Resolves when the picker says the photo was added.
+ */
+export async function uploadDocument(page: Page, label: string, file: string = DOCUMENT_FIXTURE): Promise<void> {
+  const picker = page.getByText(label, { exact: true }).locator('xpath=ancestor::div[.//button][1]');
+  const uploaded = page.waitForResponse(
+    (response) => response.url().includes('/documents/') && response.request().method() === 'POST',
+  );
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    picker.getByRole('button', { name: /^(Choose|Change) photo$/ }).click(),
+  ]);
+  await chooser.setFiles(file);
+  expect((await uploaded).status()).toBe(201);
+  await expect(picker.getByText('Photo added', { exact: true })).toBeVisible();
 }
 
 /** Closes every context openApp made; call after each test. */
