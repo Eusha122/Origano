@@ -68,8 +68,12 @@ export async function loadOrders(db: Executor, ids: string[], viewer: Viewer): P
     unit_price_poisha: number;
     quantity: number;
     line_total_poisha: number;
+    options: { nameEn: string; nameBn: string; priceDelta: number }[];
+    note: string | null;
+    discount_poisha: number;
   }>(sql`
-    SELECT order_id, menu_item_id, name_en, name_bn, unit_price_poisha, quantity, line_total_poisha
+    SELECT order_id, menu_item_id, name_en, name_bn, unit_price_poisha, quantity, line_total_poisha, options, note,
+      discount_poisha
     FROM order_items WHERE order_id IN (${list}) ORDER BY created_at, id`);
   const events = await db.execute<{ order_id: string; event: string; at: string }>(sql`
     SELECT order_id, event, ${iso('created_at')} AS at
@@ -101,6 +105,9 @@ export async function loadOrders(db: Executor, ids: string[], viewer: Viewer): P
           unitPrice: i.unit_price_poisha,
           quantity: i.quantity,
           lineTotal: i.line_total_poisha,
+          options: i.options,
+          note: i.note,
+          discount: i.discount_poisha,
         })),
       subtotal: row.subtotal_poisha,
       deliveryFee: row.delivery_fee_poisha,

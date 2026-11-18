@@ -1,6 +1,6 @@
 import { bestDiscount, type Discount, type Money, poisha } from '@oregano/domain';
 import { sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import type { Db, Executor } from '../db/client';
 import { publicImageUrl } from './images';
 
 export type OptionRow = {
@@ -48,7 +48,7 @@ type DiscountRow = {
 };
 
 /** Live discounts of a restaurant at `now`: active, started and not yet ended. */
-export async function liveDiscounts(db: Db, restaurantId: string, now: Date): Promise<Discount[]> {
+export async function liveDiscounts(db: Executor, restaurantId: string, now: Date): Promise<Discount[]> {
   const rows = await db.execute<DiscountRow>(sql`
     SELECT kind, value, scope, menu_item_id, category_id FROM restaurant_discounts
     WHERE restaurant_id = ${restaurantId} AND is_active

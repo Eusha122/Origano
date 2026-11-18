@@ -9,12 +9,24 @@ export const MAX_LINE_QUANTITY = 20;
 export const PlaceOrderBody = z.object({
   restaurantId: z.uuid(),
   items: z
-    .array(z.object({ menuItemId: z.uuid(), quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY) }))
+    .array(
+      z.object({
+        menuItemId: z.uuid(),
+        quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY),
+        /** The chosen size and add-ons. The server prices them; the client never sends a price. */
+        optionIds: z.array(z.uuid()).max(10).optional(),
+        /** A note for the kitchen, such as "Less spicy". */
+        note: z.string().trim().max(120).optional(),
+      }),
+    )
     .min(1)
     .max(30)
-    .refine((items) => new Set(items.map((i) => i.menuItemId)).size === items.length, {
-      error: 'Duplicate menu item',
-    }),
+    .refine(
+      (items) =>
+        new Set(items.map((i) => `${i.menuItemId}|${[...(i.optionIds ?? [])].sort().join(',')}|${i.note ?? ''}`))
+          .size === items.length,
+      { error: 'Duplicate line' },
+    ),
   delivery: z.object({
     lat: z.number().min(-90).max(90),
     lng: z.number().min(-180).max(180),
@@ -33,6 +45,11 @@ export const OrderItem = z.object({
   unitPrice: z.number().int(),
   quantity: z.number().int(),
   lineTotal: z.number().int(),
+  /** The chosen options, as priced when the order was placed. */
+  options: z.array(z.object({ nameEn: z.string(), nameBn: z.string(), priceDelta: z.number().int() })),
+  note: z.string().nullable(),
+  /** Per unit, already taken off `unitPrice`. */
+  discount: z.number().int(),
 });
 export type OrderItem = z.infer<typeof OrderItem>;
 
