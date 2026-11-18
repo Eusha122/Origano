@@ -103,6 +103,8 @@ export const en = {
   'error.applicationNotEditable': 'This application is with the Oregano team and cannot be changed now.',
   'error.applicationIncomplete': 'Some details or documents are missing. Add them, then send again.',
   'error.applicationExists': 'You already have an application in progress.',
+  'error.staffLimitReached': 'This restaurant already has the most staff it can have. Remove someone first.',
+  'error.cannotRemoveLastOwner': 'A restaurant needs at least one owner, so the last owner cannot be removed.',
   'error.agencyCodeInvalid': 'That agency code was not found. Check it with your agency.',
   'error.riderInviteMissing': 'This restaurant has not invited this phone number yet. Ask the owner to add you.',
   'error.unsupportedDocument': 'We could not read that file. Upload a clear JPEG, PNG or WebP photo.',

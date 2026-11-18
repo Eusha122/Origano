@@ -35,6 +35,12 @@ const event = (over: Partial<OrderChangedPayload> = {}): OrderChangedPayload => 
 const rider = (id: string, zoneId: string, status = 'approved'): AuthUser =>
   user({ id, rider: { zoneId, status, isOnline: true, type: 'independent', agencyActive: true, restaurantId: null } });
 
+const staffRider = (id: string, zoneId: string, restaurantId: string): AuthUser =>
+  user({
+    id,
+    rider: { zoneId, status: 'approved', isOnline: true, type: 'restaurant_staff', agencyActive: true, restaurantId },
+  });
+
 describe('audienceIncludes', () => {
   const cases: [string, AuthUser, OrderChangedPayload, boolean][] = [
     ['a superadmin', user({ teamRoles: ['superadmin'] }), event(), true],
@@ -50,6 +56,8 @@ describe('audienceIncludes', () => {
     ['zone rider, placed, no rider', rider('d2', 'z1'), event({ status: 'placed' }), false],
     ['rider in another zone', rider('d2', 'z2'), event({ status: 'ready' }), false],
     ['unapproved rider in the zone', rider('d2', 'z1', 'applied'), event({ status: 'ready' }), false],
+    ['a restaurant rider, their restaurant', staffRider('d3', 'z1', 'r1'), event({ status: 'ready' }), true],
+    ['a restaurant rider, another restaurant', staffRider('d3', 'z1', 'r9'), event({ status: 'ready' }), false],
   ];
   it.each(cases)('%s', (_name, who, ev, expected) => {
     expect(audienceIncludes(who, ev)).toBe(expected);

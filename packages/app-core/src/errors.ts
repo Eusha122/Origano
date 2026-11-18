@@ -38,6 +38,8 @@ const KEYS: Record<ErrorCode, MessageKey> = {
   application_not_editable: 'error.applicationNotEditable',
   application_incomplete: 'error.applicationIncomplete',
   application_exists: 'error.applicationExists',
+  staff_limit_reached: 'error.staffLimitReached',
+  cannot_remove_last_owner: 'error.cannotRemoveLastOwner',
   agency_code_invalid: 'error.agencyCodeInvalid',
   rider_invite_missing: 'error.riderInviteMissing',
   unsupported_document: 'error.unsupportedDocument',

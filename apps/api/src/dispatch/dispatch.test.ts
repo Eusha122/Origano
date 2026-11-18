@@ -235,4 +235,34 @@ describe('riders: offers, claiming and delivering', () => {
     const res = await offers(RIDER_A);
     expect([res.statusCode, res.json().error.code]).toEqual([403, 'forbidden']);
   });
+
+  it('a restaurant’s own rider sees and may claim only that restaurant’s orders', async () => {
+    const own = await accepted();
+    const other = await accepted();
+    await owner(own.id, 'ready');
+    await owner(other.id, 'ready');
+    // The second order belongs to another restaurant.
+    const rice = (
+      await t.db.execute<{ id: string }>(sql`
+        INSERT INTO restaurants (zone_id, slug, name_en, name_bn, cuisine_en, cuisine_bn, address_line, location, status)
+        VALUES (${t.demo().zoneId}, 'rice-house', 'Rice House', 'Rice House', 'Rice', 'Rice', 'Main Road',
+          ST_SetSRID(ST_MakePoint(88.28, 24.6), 4326)::geography, 'approved') RETURNING id`)
+    )[0]?.id;
+    await t.db.execute(sql`UPDATE orders SET restaurant_id = ${rice} WHERE id = ${other.id}`);
+    // Rider B becomes Burger Lane’s own rider.
+    await t.db.execute(sql`
+      UPDATE riders SET type = 'restaurant_staff', restaurant_id = ${t.demo().restaurantId}
+      WHERE user_id = (SELECT id FROM users WHERE phone = '+8801711000005')`);
+
+    await online(RIDER_B);
+    const list = (await offers(RIDER_B)).json() as { offers: { orderId: string }[] };
+    expect(list.offers.map((o) => o.orderId)).toEqual([own.id]);
+    const refused = await claim(RIDER_B, other.id);
+    expect(refused.statusCode).toBe(404);
+    // Nothing was taken: an ordinary rider still sees and can claim both.
+    await online(RIDER_A);
+    const all = (await offers(RIDER_A)).json() as { offers: { orderId: string }[] };
+    expect(all.offers.map((o) => o.orderId).sort()).toEqual([own.id, other.id].sort());
+    expect((await claim(RIDER_B, own.id)).statusCode).toBe(200);
+  });
 });

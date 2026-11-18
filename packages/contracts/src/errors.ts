@@ -32,6 +32,8 @@ export const ERROR_CODES = [
   'application_not_editable',
   'application_incomplete',
   'application_exists',
+  'staff_limit_reached',
+  'cannot_remove_last_owner',
   'agency_code_invalid',
   'rider_invite_missing',
   'unsupported_document',

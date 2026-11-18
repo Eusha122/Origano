@@ -27,7 +27,7 @@ export function dispatchRoutes(app: FastifyInstance, { db }: Services): void {
   app.get('/rider/offers', async (request): Promise<{ offers: RiderOffer[] }> => {
     const user = requireWorkingRider(request);
     if (!user.rider?.isOnline) return { offers: [] };
-    return { offers: await listOffers(db, user.rider.zoneId) };
+    return { offers: await listOffers(db, user.rider.zoneId, user.rider.restaurantId) };
   });
 
   app.get('/rider/orders', async (request): Promise<{ orders: Order[] }> => {

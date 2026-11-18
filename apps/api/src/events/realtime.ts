@@ -34,7 +34,9 @@ export function audienceIncludes(user: AuthUser, event: OrderChangedPayload): bo
   if (user.restaurantIds.includes(event.restaurantId)) return true;
   if (event.riderId !== null) return user.id === event.riderId;
   const offerable = event.status === 'preparing' || event.status === 'ready';
-  return offerable && riderCanWork(user.rider) && user.rider?.zoneId === event.zoneId;
+  if (!offerable || !riderCanWork(user.rider) || user.rider?.zoneId !== event.zoneId) return false;
+  // A restaurant's own rider hears only about that restaurant's orders.
+  return user.rider.restaurantId === null || user.rider.restaurantId === event.restaurantId;
 }
 
 type Connection = { socket: WebSocket; user: AuthUser; sessionId: string; expiryTimer: NodeJS.Timeout };

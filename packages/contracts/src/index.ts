@@ -5,4 +5,5 @@ export * from './errors';
 export * from './onboarding';
 export * from './orders';
 export * from './realtime';
+export * from './restaurant';
 export * from './rider';

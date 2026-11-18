@@ -18,6 +18,7 @@ import { registerAuth } from './identity/auth';
 import { devRoutes } from './identity/dev-routes';
 import { identityRoutes } from './identity/routes';
 import { authenticateAccess } from './identity/sessions';
+import { staffRoutes } from './identity/staff-routes';
 import { MAX_DOCUMENT_BYTES } from './media/image';
 import type { ObjectStore } from './media/store';
 import type { SmsDeps } from './notifications/sms/queue';
@@ -167,6 +168,7 @@ export async function buildApp(deps: {
         adminRoutes(v1, config, services);
         documentRoutes(v1, config, services);
         onboardingRoutes(v1, config, services);
+        staffRoutes(v1, config, services);
         zoneRoutes(v1, services);
         if (config.devOtpPeek) devRoutes(v1, services);
       },

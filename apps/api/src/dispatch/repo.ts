@@ -21,6 +21,7 @@ export function claimOrder(db: Db, riderId: string, orderId: string): Promise<Cl
       UPDATE orders SET rider_id = ${riderId}, updated_at = now()
       WHERE id = ${orderId} AND rider_id IS NULL AND status IN ('preparing', 'ready')
         AND zone_id = (SELECT zone_id FROM riders WHERE user_id = ${riderId})
+        AND COALESCE((SELECT restaurant_id = orders.restaurant_id FROM riders WHERE user_id = ${riderId}), TRUE)
       RETURNING id, customer_id, restaurant_id, zone_id, status`);
     const row = won[0];
     if (row) {
@@ -48,7 +49,11 @@ export function claimOrder(db: Db, riderId: string, orderId: string): Promise<Cl
 }
 
 /** Unclaimed preparing/ready orders in the rider's zone, newest first. No customer phone or address line. */
-export async function listOffers(db: Db, zoneId: string): Promise<RiderOffer[]> {
+export async function listOffers(
+  db: Db,
+  zoneId: string,
+  onlyRestaurantId: string | null = null,
+): Promise<RiderOffer[]> {
   const rows = await db.execute<{
     id: string;
     number: number;
@@ -64,6 +69,7 @@ export async function listOffers(db: Db, zoneId: string): Promise<RiderOffer[]> 
       ST_Distance(r.location, o.delivery_location) AS distance_m, o.delivery_fee_poisha
     FROM orders o JOIN restaurants r ON r.id = o.restaurant_id
     WHERE o.zone_id = ${zoneId} AND o.rider_id IS NULL AND o.status IN ('preparing', 'ready')
+      ${onlyRestaurantId ? sql`AND o.restaurant_id = ${onlyRestaurantId}` : sql``}
     ORDER BY o.created_at DESC, o.number DESC`);
   return rows.map((r) => ({
     orderId: r.id,
